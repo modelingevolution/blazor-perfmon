@@ -50,12 +50,12 @@ else
 }
 
 app.UseHttpsRedirection();
-app.UseAntiforgery();
 
 // Configure Blazor WebAssembly hosting
 app.UseBlazorFrameworkFiles();
 app.UseStaticFiles();
 app.UseRouting();
+app.UseAntiforgery();
 
 // Enable WebSockets
 app.UseWebSockets(new WebSocketOptions
