@@ -3,7 +3,9 @@
 @using Frontend.Rendering
 @using SkiaSharp
 @using SkiaSharp.Views.Blazor
+@using Microsoft.AspNetCore.Components.Web
 @implements IAsyncDisposable
+@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
 
 <PageTitle>Jetson Monitor</PageTitle>
 
