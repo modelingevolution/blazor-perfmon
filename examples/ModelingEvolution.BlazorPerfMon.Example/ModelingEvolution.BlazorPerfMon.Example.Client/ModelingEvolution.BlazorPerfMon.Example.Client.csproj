@@ -13,4 +13,8 @@
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly" Version="10.0.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\ModelingEvolution.BlazorPerfMon.Client\ModelingEvolution.BlazorPerfMon.Client.csproj" />
+  </ItemGroup>
+
 </Project>

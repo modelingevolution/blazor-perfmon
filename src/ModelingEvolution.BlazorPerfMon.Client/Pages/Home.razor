@@ -127,7 +127,7 @@
         }
     }
 
-    private void OnMetricsReceived(Models.MetricsSnapshot snapshot)
+    private void OnMetricsReceived(Frontend.Models.MetricsSnapshot snapshot)
     {
         MetricsStore.AddSnapshot(snapshot);
         _latestCollectionTimeMs = snapshot.CollectionTimeMs;

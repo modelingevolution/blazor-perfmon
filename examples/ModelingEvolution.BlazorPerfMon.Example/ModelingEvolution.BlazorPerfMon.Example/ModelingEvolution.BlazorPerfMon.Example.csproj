@@ -12,4 +12,9 @@
     <PackageReference Include="Microsoft.AspNetCore.Components.WebAssembly.Server" Version="10.0.0" />
   </ItemGroup>
 
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\src\ModelingEvolution.BlazorPerfMon.Server\ModelingEvolution.BlazorPerfMon.Server.csproj" />
+    <ProjectReference Include="..\..\..\src\ModelingEvolution.BlazorPerfMon.Client\ModelingEvolution.BlazorPerfMon.Client.csproj" />
+  </ItemGroup>
+
 </Project>
