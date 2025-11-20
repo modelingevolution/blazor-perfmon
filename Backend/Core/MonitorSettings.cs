@@ -24,4 +24,9 @@ public sealed class MonitorSettings
     /// Number of data points to keep in rolling window (default: 120 for 60 seconds at 2Hz).
     /// </summary>
     public int DataPointsToKeep { get; set; } = 120;
+
+    /// <summary>
+    /// GPU collector type: "NvSmi" for desktop GPUs, "NvTegra" for Jetson platforms.
+    /// </summary>
+    public string GpuCollectorType { get; set; } = "NvSmi";
 }

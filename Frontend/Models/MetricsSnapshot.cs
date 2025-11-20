@@ -38,4 +38,7 @@ public sealed class MetricsSnapshot
 
     [Key(9)]
     public uint DiskWriteIops { get; init; }
+
+    [Key(10)]
+    public uint CollectionTimeMs { get; init; }
 }

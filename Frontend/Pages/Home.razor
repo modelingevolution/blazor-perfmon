@@ -8,16 +8,8 @@
 <PageTitle>Jetson Monitor</PageTitle>
 
 <div class="monitor-container">
-    @if (_isConnected)
-    {
-        <div class="status connected">Connected</div>
-    }
-    else
-    {
-        <div class="status disconnected">Disconnected - Reconnecting...</div>
-    }
-
-    <SKCanvasView @ref="_canvasView" OnPaintSurface="OnPaintSurface" IgnorePixelScaling="false" />
+    <div class="status-circle @GetStatusClass()"></div>
+    <SKCanvasView @ref="_canvasView" OnPaintSurface="OnPaintSurface" IgnorePixelScaling="false" EnableRenderLoop="true" />
 </div>
 
 <style>
@@ -41,25 +33,27 @@
         overflow: hidden;
     }
 
-    .status {
+    .status-circle {
         position: absolute;
-        top: 10px;
-        right: 10px;
-        padding: 8px 16px;
-        border-radius: 4px;
-        font-family: monospace;
-        font-size: 14px;
+        top: 15px;
+        right: 15px;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
         z-index: 1000;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
     }
 
-    .connected {
-        background: #2e7d32;
-        color: white;
+    .status-green {
+        background: #4caf50;
     }
 
-    .disconnected {
-        background: #c62828;
-        color: white;
+    .status-yellow {
+        background: #ffeb3b;
+    }
+
+    .status-red {
+        background: #f44336;
     }
 
     canvas {
@@ -76,18 +70,20 @@
 
     private SKCanvasView? _canvasView;
     private BarChart? _cpuBarChart;
+    private BarChart? _gpuBarChart;
     private TimeSeriesChart? _totalAverageChart;
     private TimeSeriesChart? _networkChart;
     private TimeSeriesChart? _diskChart;
     private bool _isConnected;
-    private PeriodicTimer? _refreshTimer;
+    private uint _latestCollectionTimeMs;
+    private string _currentStatusClass = "status-red";
     private PeriodicTimer? _scaleUpdateTimer;
-    private Task? _refreshTask;
     private Task? _scaleUpdateTask;
 
     protected override async Task OnInitializedAsync()
     {
         _cpuBarChart = new BarChart();
+        _gpuBarChart = new BarChart();
         _totalAverageChart = new TimeSeriesChart();
         _networkChart = new TimeSeriesChart();
         _diskChart = new TimeSeriesChart();
@@ -107,10 +103,6 @@
     {
         if (firstRender && _canvasView != null)
         {
-            // Start refresh timer at 30 FPS
-            _refreshTimer = new PeriodicTimer(TimeSpan.FromMilliseconds(33));
-            _refreshTask = RefreshCanvasLoop();
-
             // Start scale update timer (every 5 seconds)
             _scaleUpdateTimer = new PeriodicTimer(TimeSpan.FromSeconds(5));
             _scaleUpdateTask = ScaleUpdateLoop();
@@ -135,37 +127,47 @@
         }
     }
 
-    private async Task RefreshCanvasLoop()
-    {
-        if (_refreshTimer == null) return;
-
-        try
-        {
-            while (await _refreshTimer.WaitForNextTickAsync())
-            {
-                _canvasView?.Invalidate();
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            // Timer disposed
-        }
-    }
-
     private void OnMetricsReceived(Models.MetricsSnapshot snapshot)
     {
         MetricsStore.AddSnapshot(snapshot);
+        _latestCollectionTimeMs = snapshot.CollectionTimeMs;
+
+        // Only update UI if status changed
+        var newStatus = CalculateStatusClass();
+        if (newStatus != _currentStatusClass)
+        {
+            _currentStatusClass = newStatus;
+            InvokeAsync(StateHasChanged);
+        }
     }
 
     private void OnConnectionStateChanged(bool isConnected)
     {
         _isConnected = isConnected;
-        InvokeAsync(StateHasChanged);
+
+        // Connection state change always affects status
+        var newStatus = CalculateStatusClass();
+        if (newStatus != _currentStatusClass)
+        {
+            _currentStatusClass = newStatus;
+            InvokeAsync(StateHasChanged);
+        }
     }
 
     private void OnMetricsUpdated()
     {
         // Data updated, canvas will be refreshed by timer
+    }
+
+    private string GetStatusClass() => _currentStatusClass;
+
+    private string CalculateStatusClass()
+    {
+        if (!_isConnected)
+            return "status-red";
+
+        var settings = Settings.Value;
+        return _latestCollectionTimeMs < settings.CollectionIntervalMs ? "status-green" : "status-yellow";
     }
 
     private void OnPaintSurface(SKPaintSurfaceEventArgs e)
@@ -175,16 +177,19 @@
 
         var bounds = new SKRect(0, 0, e.Info.Width, e.Info.Height);
 
-        if (_cpuBarChart != null && _totalAverageChart != null &&
+        if (_cpuBarChart != null && _gpuBarChart != null && _totalAverageChart != null &&
             _networkChart != null && _diskChart != null && MetricsStore.CoreCount > 0)
         {
-            // Split canvas into 2x2 grid
+            // Layout: 3 columns in top row, 2 columns in bottom row
+            float thirdWidth = bounds.Width / 3f;
             float halfWidth = bounds.Width * 0.5f;
             float halfHeight = bounds.Height * 0.5f;
 
-            // Top-left: CPU bar chart
+            var settings = Settings.Value;
+
+            // Top-left: CPU bar chart (1/3 width)
             _cpuBarChart.Location = new SKPoint(0, 0);
-            _cpuBarChart.Size = new SKSize(halfWidth, halfHeight);
+            _cpuBarChart.Size = new SKSize(thirdWidth, halfHeight);
 
             var currentLoads = new float[MetricsStore.CoreCount];
             var labels = new string[MetricsStore.CoreCount];
@@ -199,15 +204,37 @@
             _cpuBarChart.SetData("CPU Cores", labels, currentLoads);
             _cpuBarChart.Render(canvas);
 
-            // Top-right: Total CPU average
-            _totalAverageChart.Location = new SKPoint(halfWidth, 0);
-            _totalAverageChart.Size = new SKSize(halfWidth, halfHeight);
+            // Top-middle: GPU bar chart (1/3 width)
+            _gpuBarChart.Location = new SKPoint(thirdWidth, 0);
+            _gpuBarChart.Size = new SKSize(thirdWidth, halfHeight);
+
+            var gpuBuffer = MetricsStore.GetGpuBuffer();
+            float? gpuLatest = gpuBuffer.GetLatest();
+            float gpuLoad = gpuLatest ?? 0f;
+
+            _gpuBarChart.SetData("GPU", new[] { "GPU" }, new[] { gpuLoad });
+            _gpuBarChart.Render(canvas);
+
+            // Top-right: Total Average CPU + GPU (1/3 width, 2 series)
+            _totalAverageChart.Location = new SKPoint(thirdWidth * 2, 0);
+            _totalAverageChart.Size = new SKSize(thirdWidth, halfHeight);
 
             var totalAverageBuffer = MetricsStore.GetTotalAverageBuffer();
             var totalAverageData = totalAverageBuffer.ToArray();
+            var gpuData = gpuBuffer.ToArray();
 
-            var settings = Settings.Value;
-            _totalAverageChart.SetData("Total Average CPU Load", totalAverageData, settings.DataPointsToKeep, settings.CollectionIntervalMs);
+            // Get latest values for title
+            float cpuAvgLatest = totalAverageData.Length > 0 ? totalAverageData[^1] : 0f;
+            float gpuAvgLatest = gpuData.Length > 0 ? gpuData[^1] : 0f;
+            string totalTitle = $"CPU/GPU Load ({cpuAvgLatest:F1}% cpu, {gpuAvgLatest:F1}% gpu)";
+
+            var totalSeries = new[]
+            {
+                ("CPU Avg", totalAverageData, new SKColor(100, 255, 100)),  // Green
+                ("GPU", gpuData, new SKColor(255, 200, 100))                // Orange
+            };
+
+            _totalAverageChart.SetMultiSeriesData(totalTitle, totalSeries, settings.DataPointsToKeep, settings.CollectionIntervalMs, useDynamicScale: false);
             _totalAverageChart.Render(canvas);
 
             // Bottom-left: Network (Rx + Tx combined)
@@ -219,13 +246,18 @@
             var networkRxData = ConvertNetworkToKBps(networkRxBuffer.ToArray(), settings.CollectionIntervalMs);
             var networkTxData = ConvertNetworkToKBps(networkTxBuffer.ToArray(), settings.CollectionIntervalMs);
 
+            // Get latest values for title
+            float rxLatest = networkRxData.Length > 0 ? networkRxData[^1] : 0f;
+            float txLatest = networkTxData.Length > 0 ? networkTxData[^1] : 0f;
+            string networkTitle = $"Network Traffic ({rxLatest:F1} KB/s rx, {txLatest:F1} KB/s tx)";
+
             var networkSeries = new[]
             {
                 ("Rx", networkRxData, new SKColor(100, 255, 100)),  // Green
                 ("Tx", networkTxData, new SKColor(100, 200, 255))   // Blue
             };
 
-            _networkChart.SetMultiSeriesData("Network Traffic (KB/s)", networkSeries, settings.DataPointsToKeep, settings.CollectionIntervalMs, useDynamicScale: true);
+            _networkChart.SetMultiSeriesData(networkTitle, networkSeries, settings.DataPointsToKeep, settings.CollectionIntervalMs, useDynamicScale: true);
             _networkChart.Render(canvas);
 
             // Bottom-right: Disk I/O (Read + Write)
@@ -237,13 +269,18 @@
             var diskReadData = ConvertDiskToMBps(diskReadBuffer.ToArray(), settings.CollectionIntervalMs);
             var diskWriteData = ConvertDiskToMBps(diskWriteBuffer.ToArray(), settings.CollectionIntervalMs);
 
+            // Get latest values for title
+            float readLatest = diskReadData.Length > 0 ? diskReadData[^1] : 0f;
+            float writeLatest = diskWriteData.Length > 0 ? diskWriteData[^1] : 0f;
+            string diskTitle = $"Disk I/O ({readLatest:F1} MB/s read, {writeLatest:F1} MB/s write)";
+
             var diskSeries = new[]
             {
                 ("Read", diskReadData, new SKColor(100, 255, 100)),  // Green
                 ("Write", diskWriteData, new SKColor(255, 200, 100))  // Orange
             };
 
-            _diskChart.SetMultiSeriesData("Disk I/O (MB/s)", diskSeries, settings.DataPointsToKeep, settings.CollectionIntervalMs, useDynamicScale: true);
+            _diskChart.SetMultiSeriesData(diskTitle, diskSeries, settings.DataPointsToKeep, settings.CollectionIntervalMs, useDynamicScale: true);
             _diskChart.Render(canvas);
         }
     }
@@ -276,17 +313,6 @@
 
     public async ValueTask DisposeAsync()
     {
-        // Stop refresh timer
-        _refreshTimer?.Dispose();
-        if (_refreshTask != null)
-        {
-            try
-            {
-                await _refreshTask;
-            }
-            catch { }
-        }
-
         // Stop scale update timer
         _scaleUpdateTimer?.Dispose();
         if (_scaleUpdateTask != null)
@@ -311,6 +337,7 @@
         }
 
         _cpuBarChart?.Dispose();
+        _gpuBarChart?.Dispose();
         _totalAverageChart?.Dispose();
         _networkChart?.Dispose();
         _diskChart?.Dispose();

@@ -6,21 +6,21 @@ namespace Backend.Services;
 
 /// <summary>
 /// TPL Dataflow pipeline for metrics multiplexing.
-/// Stage 3: Uses 3-way JoinBlock to combine CPU, Network (with collection time), and Disk data.
+/// Stage 4: Uses 3-way JoinBlock to combine (CPU+GPU), Network (with collection time), and Disk data.
 /// </summary>
 public sealed class MultiplexService : IDisposable
 {
-    private readonly BufferBlock<float[]> _cpuBuffer;
+    private readonly BufferBlock<(float[] CpuLoads, float GpuLoad)> _cpuGpuBuffer;
     private readonly BufferBlock<(ulong RxBytes, ulong TxBytes, uint CollectionTimeMs)> _networkBuffer;
     private readonly BufferBlock<(ulong ReadBytes, ulong WriteBytes, uint ReadIops, uint WriteIops)> _diskBuffer;
-    private readonly JoinBlock<float[], (ulong RxBytes, ulong TxBytes, uint CollectionTimeMs), (ulong ReadBytes, ulong WriteBytes, uint ReadIops, uint WriteIops)> _joinBlock;
-    private readonly TransformBlock<Tuple<float[], (ulong, ulong, uint), (ulong, ulong, uint, uint)>, byte[]> _serializeBlock;
+    private readonly JoinBlock<(float[], float), (ulong RxBytes, ulong TxBytes, uint CollectionTimeMs), (ulong ReadBytes, ulong WriteBytes, uint ReadIops, uint WriteIops)> _joinBlock;
+    private readonly TransformBlock<Tuple<(float[], float), (ulong, ulong, uint), (ulong, ulong, uint, uint)>, byte[]> _serializeBlock;
     private readonly BroadcastBlock<byte[]> _broadcastBlock;
 
     public MultiplexService()
     {
-        // Stage 3: Separate buffers for CPU, Network (with collection time), and Disk
-        _cpuBuffer = new BufferBlock<float[]>(new DataflowBlockOptions
+        // Stage 4: Separate buffers for CPU+GPU, Network (with collection time), and Disk
+        _cpuGpuBuffer = new BufferBlock<(float[], float)>(new DataflowBlockOptions
         {
             BoundedCapacity = 2
         });
@@ -35,23 +35,25 @@ public sealed class MultiplexService : IDisposable
             BoundedCapacity = 2
         });
 
-        // JoinBlock: Wait for CPU, Network (with collection time), and Disk data before proceeding
-        _joinBlock = new JoinBlock<float[], (ulong, ulong, uint), (ulong, ulong, uint, uint)>(new GroupingDataflowBlockOptions
+        // JoinBlock: Wait for CPU+GPU, Network (with collection time), and Disk data before proceeding
+        _joinBlock = new JoinBlock<(float[], float), (ulong, ulong, uint), (ulong, ulong, uint, uint)>(new GroupingDataflowBlockOptions
         {
             BoundedCapacity = 2
         });
 
         // Transform block: Serialize combined data to MessagePack
-        _serializeBlock = new TransformBlock<Tuple<float[], (ulong, ulong, uint), (ulong, ulong, uint, uint)>, byte[]>(
+        _serializeBlock = new TransformBlock<Tuple<(float[], float), (ulong, ulong, uint), (ulong, ulong, uint, uint)>, byte[]>(
             combinedData =>
             {
-                var (cpuData, networkData, diskData) = combinedData;
+                var (cpuGpuData, networkData, diskData) = combinedData;
+                var (cpuLoads, gpuLoad) = cpuGpuData;
                 var (rxBytes, txBytes, collectionTimeMs) = networkData;
                 var (readBytes, writeBytes, readIops, writeIops) = diskData;
                 var snapshot = new MetricsSnapshot
                 {
                     TimestampMs = (uint)Environment.TickCount,
-                    CpuLoads = cpuData,
+                    GpuLoad = gpuLoad,
+                    CpuLoads = cpuLoads,
                     NetworkRxBytes = rxBytes,
                     NetworkTxBytes = txBytes,
                     DiskReadBytes = readBytes,
@@ -72,8 +74,8 @@ public sealed class MultiplexService : IDisposable
         // Broadcast block: Send serialized data to all connected clients
         _broadcastBlock = new BroadcastBlock<byte[]>(bytes => bytes);
 
-        // Link pipeline: CPU/Network/Disk -> Join -> Serialize -> Broadcast
-        _cpuBuffer.LinkTo(_joinBlock.Target1, new DataflowLinkOptions { PropagateCompletion = true });
+        // Link pipeline: (CPU+GPU)/Network/Disk -> Join -> Serialize -> Broadcast
+        _cpuGpuBuffer.LinkTo(_joinBlock.Target1, new DataflowLinkOptions { PropagateCompletion = true });
         _networkBuffer.LinkTo(_joinBlock.Target2, new DataflowLinkOptions { PropagateCompletion = true });
         _diskBuffer.LinkTo(_joinBlock.Target3, new DataflowLinkOptions { PropagateCompletion = true });
         _joinBlock.LinkTo(_serializeBlock, new DataflowLinkOptions { PropagateCompletion = true });
@@ -81,12 +83,12 @@ public sealed class MultiplexService : IDisposable
     }
 
     /// <summary>
-    /// Post CPU metrics to the pipeline.
+    /// Post CPU and GPU metrics to the pipeline.
     /// Returns false if the buffer is full (backpressure).
     /// </summary>
-    public bool PostCpuMetrics(float[] cpuData)
+    public bool PostCpuGpuMetrics(float[] cpuData, float gpuLoad)
     {
-        return _cpuBuffer.Post(cpuData);
+        return _cpuGpuBuffer.Post((cpuData, gpuLoad));
     }
 
     /// <summary>
@@ -140,7 +142,7 @@ public sealed class MultiplexService : IDisposable
 
     public void Dispose()
     {
-        _cpuBuffer.Complete();
+        _cpuGpuBuffer.Complete();
         _networkBuffer.Complete();
         _diskBuffer.Complete();
         _joinBlock.Complete();

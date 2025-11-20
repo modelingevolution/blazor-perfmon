@@ -4,7 +4,7 @@ namespace Frontend.Services;
 
 /// <summary>
 /// Manages circular buffers for metrics data with 60-second rolling window.
-/// Stage 3: CPU, Network, and Disk metrics.
+/// Stage 4: CPU, GPU, Network, and Disk metrics.
 /// </summary>
 public sealed class MetricsStore
 {
@@ -15,6 +15,9 @@ public sealed class MetricsStore
 
     // Total average CPU load over time
     private readonly CircularBuffer<float> _totalAverageBuffer;
+
+    // Stage 4: GPU buffer
+    private readonly CircularBuffer<float> _gpuBuffer;
 
     // Stage 2: Network buffers
     private readonly CircularBuffer<ulong> _networkRxBuffer;
@@ -36,6 +39,7 @@ public sealed class MetricsStore
         // Start with empty array, will be initialized on first snapshot
         _cpuBuffers = Array.Empty<CircularBuffer<float>>();
         _totalAverageBuffer = new CircularBuffer<float>(DataPoints);
+        _gpuBuffer = new CircularBuffer<float>(DataPoints);
         _networkRxBuffer = new CircularBuffer<ulong>(DataPoints);
         _networkTxBuffer = new CircularBuffer<ulong>(DataPoints);
         _diskReadBytesBuffer = new CircularBuffer<ulong>(DataPoints);
@@ -46,7 +50,7 @@ public sealed class MetricsStore
 
     /// <summary>
     /// Add a metrics snapshot to the store.
-    /// Stage 3: Processes CPU, Network, and Disk data.
+    /// Stage 4: Processes CPU, GPU, Network, and Disk data.
     /// </summary>
     public void AddSnapshot(MetricsSnapshot snapshot)
     {
@@ -72,6 +76,9 @@ public sealed class MetricsStore
             float average = snapshot.CpuLoads.Average();
             _totalAverageBuffer.Add(average);
         }
+
+        // Stage 4: Store GPU metrics
+        _gpuBuffer.Add(snapshot.GpuLoad);
 
         // Stage 2: Store Network metrics
         _networkRxBuffer.Add(snapshot.NetworkRxBytes);
@@ -111,6 +118,11 @@ public sealed class MetricsStore
     /// Get total average CPU load buffer.
     /// </summary>
     public CircularBuffer<float> GetTotalAverageBuffer() => _totalAverageBuffer;
+
+    /// <summary>
+    /// Get GPU utilization buffer.
+    /// </summary>
+    public CircularBuffer<float> GetGpuBuffer() => _gpuBuffer;
 
     /// <summary>
     /// Get network Rx buffer.
@@ -153,6 +165,7 @@ public sealed class MetricsStore
         }
 
         _totalAverageBuffer.Clear();
+        _gpuBuffer.Clear();
         _networkRxBuffer.Clear();
         _networkTxBuffer.Clear();
         _diskReadBytesBuffer.Clear();

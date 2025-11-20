@@ -33,12 +33,12 @@ public abstract class ChartBase : IDisposable
     {
         TextFont = new SKFont
         {
-            Size = 12f
+            Size = 16f
         };
 
         TitleFont = new SKFont
         {
-            Size = 18f
+            Size = 24f
         };
 
         TextPaint = new SKPaint
