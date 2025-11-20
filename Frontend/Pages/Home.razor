@@ -1,0 +1,318 @@
+@page "/"
+@using Frontend.Services
+@using Frontend.Rendering
+@using SkiaSharp
+@using SkiaSharp.Views.Blazor
+@implements IAsyncDisposable
+
+<PageTitle>Jetson Monitor</PageTitle>
+
+<div class="monitor-container">
+    @if (_isConnected)
+    {
+        <div class="status connected">Connected</div>
+    }
+    else
+    {
+        <div class="status disconnected">Disconnected - Reconnecting...</div>
+    }
+
+    <SKCanvasView @ref="_canvasView" OnPaintSurface="OnPaintSurface" IgnorePixelScaling="false" />
+</div>
+
+<style>
+    body, html {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        width: 100%;
+        height: 100%;
+    }
+
+    .monitor-container {
+        width: 100vw;
+        height: 100vh;
+        background: #1a1a1a;
+        margin: 0;
+        padding: 0;
+        position: fixed;
+        top: 0;
+        left: 0;
+        overflow: hidden;
+    }
+
+    .status {
+        position: absolute;
+        top: 10px;
+        right: 10px;
+        padding: 8px 16px;
+        border-radius: 4px;
+        font-family: monospace;
+        font-size: 14px;
+        z-index: 1000;
+    }
+
+    .connected {
+        background: #2e7d32;
+        color: white;
+    }
+
+    .disconnected {
+        background: #c62828;
+        color: white;
+    }
+
+    canvas {
+        width: 100%;
+        height: 100%;
+        display: block;
+    }
+</style>
+
+@code {
+    [Inject] private WebSocketClient WebSocketClient { get; set; } = default!;
+    [Inject] private MetricsStore MetricsStore { get; set; } = default!;
+    [Inject] private Microsoft.Extensions.Options.IOptions<Frontend.Models.MonitorSettings> Settings { get; set; } = default!;
+
+    private SKCanvasView? _canvasView;
+    private BarChart? _cpuBarChart;
+    private TimeSeriesChart? _totalAverageChart;
+    private TimeSeriesChart? _networkChart;
+    private TimeSeriesChart? _diskChart;
+    private bool _isConnected;
+    private PeriodicTimer? _refreshTimer;
+    private PeriodicTimer? _scaleUpdateTimer;
+    private Task? _refreshTask;
+    private Task? _scaleUpdateTask;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _cpuBarChart = new BarChart();
+        _totalAverageChart = new TimeSeriesChart();
+        _networkChart = new TimeSeriesChart();
+        _diskChart = new TimeSeriesChart();
+
+        // Subscribe to WebSocket events
+        WebSocketClient.OnMetricsReceived += OnMetricsReceived;
+        WebSocketClient.OnConnectionStateChanged += OnConnectionStateChanged;
+
+        // Subscribe to metrics store updates
+        MetricsStore.OnMetricsUpdated += OnMetricsUpdated;
+
+        // Connect to WebSocket
+        await WebSocketClient.ConnectAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && _canvasView != null)
+        {
+            // Start refresh timer at 30 FPS
+            _refreshTimer = new PeriodicTimer(TimeSpan.FromMilliseconds(33));
+            _refreshTask = RefreshCanvasLoop();
+
+            // Start scale update timer (every 5 seconds)
+            _scaleUpdateTimer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+            _scaleUpdateTask = ScaleUpdateLoop();
+        }
+    }
+
+    private async Task ScaleUpdateLoop()
+    {
+        if (_scaleUpdateTimer == null) return;
+
+        try
+        {
+            while (await _scaleUpdateTimer.WaitForNextTickAsync())
+            {
+                _networkChart?.UpdateDynamicScale();
+                _diskChart?.UpdateDynamicScale();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Timer disposed
+        }
+    }
+
+    private async Task RefreshCanvasLoop()
+    {
+        if (_refreshTimer == null) return;
+
+        try
+        {
+            while (await _refreshTimer.WaitForNextTickAsync())
+            {
+                _canvasView?.Invalidate();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Timer disposed
+        }
+    }
+
+    private void OnMetricsReceived(Models.MetricsSnapshot snapshot)
+    {
+        MetricsStore.AddSnapshot(snapshot);
+    }
+
+    private void OnConnectionStateChanged(bool isConnected)
+    {
+        _isConnected = isConnected;
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnMetricsUpdated()
+    {
+        // Data updated, canvas will be refreshed by timer
+    }
+
+    private void OnPaintSurface(SKPaintSurfaceEventArgs e)
+    {
+        var canvas = e.Surface.Canvas;
+        canvas.Clear();
+
+        var bounds = new SKRect(0, 0, e.Info.Width, e.Info.Height);
+
+        if (_cpuBarChart != null && _totalAverageChart != null &&
+            _networkChart != null && _diskChart != null && MetricsStore.CoreCount > 0)
+        {
+            // Split canvas into 2x2 grid
+            float halfWidth = bounds.Width * 0.5f;
+            float halfHeight = bounds.Height * 0.5f;
+
+            // Top-left: CPU bar chart
+            _cpuBarChart.Location = new SKPoint(0, 0);
+            _cpuBarChart.Size = new SKSize(halfWidth, halfHeight);
+
+            var currentLoads = new float[MetricsStore.CoreCount];
+            var labels = new string[MetricsStore.CoreCount];
+            for (int i = 0; i < MetricsStore.CoreCount; i++)
+            {
+                var buffer = MetricsStore.GetCpuBuffer(i);
+                float? latest = buffer.GetLatest();
+                currentLoads[i] = latest ?? 0f;
+                labels[i] = $"CPU{i}";
+            }
+
+            _cpuBarChart.SetData("CPU Cores", labels, currentLoads);
+            _cpuBarChart.Render(canvas);
+
+            // Top-right: Total CPU average
+            _totalAverageChart.Location = new SKPoint(halfWidth, 0);
+            _totalAverageChart.Size = new SKSize(halfWidth, halfHeight);
+
+            var totalAverageBuffer = MetricsStore.GetTotalAverageBuffer();
+            var totalAverageData = totalAverageBuffer.ToArray();
+
+            var settings = Settings.Value;
+            _totalAverageChart.SetData("Total Average CPU Load", totalAverageData, settings.DataPointsToKeep, settings.CollectionIntervalMs);
+            _totalAverageChart.Render(canvas);
+
+            // Bottom-left: Network (Rx + Tx combined)
+            _networkChart.Location = new SKPoint(0, halfHeight);
+            _networkChart.Size = new SKSize(halfWidth, halfHeight);
+
+            var networkRxBuffer = MetricsStore.GetNetworkRxBuffer();
+            var networkTxBuffer = MetricsStore.GetNetworkTxBuffer();
+            var networkRxData = ConvertNetworkToKBps(networkRxBuffer.ToArray(), settings.CollectionIntervalMs);
+            var networkTxData = ConvertNetworkToKBps(networkTxBuffer.ToArray(), settings.CollectionIntervalMs);
+
+            var networkSeries = new[]
+            {
+                ("Rx", networkRxData, new SKColor(100, 255, 100)),  // Green
+                ("Tx", networkTxData, new SKColor(100, 200, 255))   // Blue
+            };
+
+            _networkChart.SetMultiSeriesData("Network Traffic (KB/s)", networkSeries, settings.DataPointsToKeep, settings.CollectionIntervalMs, useDynamicScale: true);
+            _networkChart.Render(canvas);
+
+            // Bottom-right: Disk I/O (Read + Write)
+            _diskChart.Location = new SKPoint(halfWidth, halfHeight);
+            _diskChart.Size = new SKSize(halfWidth, halfHeight);
+
+            var diskReadBuffer = MetricsStore.GetDiskReadBytesBuffer();
+            var diskWriteBuffer = MetricsStore.GetDiskWriteBytesBuffer();
+            var diskReadData = ConvertDiskToMBps(diskReadBuffer.ToArray(), settings.CollectionIntervalMs);
+            var diskWriteData = ConvertDiskToMBps(diskWriteBuffer.ToArray(), settings.CollectionIntervalMs);
+
+            var diskSeries = new[]
+            {
+                ("Read", diskReadData, new SKColor(100, 255, 100)),  // Green
+                ("Write", diskWriteData, new SKColor(255, 200, 100))  // Orange
+            };
+
+            _diskChart.SetMultiSeriesData("Disk I/O (MB/s)", diskSeries, settings.DataPointsToKeep, settings.CollectionIntervalMs, useDynamicScale: true);
+            _diskChart.Render(canvas);
+        }
+    }
+
+    // Convert delta bytes to KB/s based on collection interval
+    private float[] ConvertNetworkToKBps(ulong[] deltas, int collectionIntervalMs)
+    {
+        var result = new float[deltas.Length];
+        // deltas are bytes per interval, convert to bytes/sec, then to KB/s
+        float intervalSec = collectionIntervalMs / 1000f;
+        for (int i = 0; i < deltas.Length; i++)
+        {
+            result[i] = (deltas[i] / intervalSec) / 1024f;
+        }
+        return result;
+    }
+
+    // Convert delta bytes to MB/s based on collection interval
+    private float[] ConvertDiskToMBps(ulong[] deltas, int collectionIntervalMs)
+    {
+        var result = new float[deltas.Length];
+        // deltas are bytes per interval, convert to bytes/sec, then to MB/s
+        float intervalSec = collectionIntervalMs / 1000f;
+        for (int i = 0; i < deltas.Length; i++)
+        {
+            result[i] = (deltas[i] / intervalSec) / (1024f * 1024f);
+        }
+        return result;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        // Stop refresh timer
+        _refreshTimer?.Dispose();
+        if (_refreshTask != null)
+        {
+            try
+            {
+                await _refreshTask;
+            }
+            catch { }
+        }
+
+        // Stop scale update timer
+        _scaleUpdateTimer?.Dispose();
+        if (_scaleUpdateTask != null)
+        {
+            try
+            {
+                await _scaleUpdateTask;
+            }
+            catch { }
+        }
+
+        if (WebSocketClient != null)
+        {
+            WebSocketClient.OnMetricsReceived -= OnMetricsReceived;
+            WebSocketClient.OnConnectionStateChanged -= OnConnectionStateChanged;
+            await WebSocketClient.DisposeAsync();
+        }
+
+        if (MetricsStore != null)
+        {
+            MetricsStore.OnMetricsUpdated -= OnMetricsUpdated;
+        }
+
+        _cpuBarChart?.Dispose();
+        _totalAverageChart?.Dispose();
+        _networkChart?.Dispose();
+        _diskChart?.Dispose();
+    }
+}
