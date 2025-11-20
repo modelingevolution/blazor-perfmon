@@ -82,7 +82,9 @@ app.Map("/ws", async context =>
 app.MapStaticAssets();
 app.MapRazorComponents<ModelingEvolution.BlazorPerfMon.Example.Components.App>()
     .AddInteractiveWebAssemblyRenderMode()
-    .AddAdditionalAssemblies(typeof(ModelingEvolution.BlazorPerfMon.Example.Client._Imports).Assembly);
+    .AddAdditionalAssemblies(
+        typeof(ModelingEvolution.BlazorPerfMon.Example.Client._Imports).Assembly,
+        typeof(Frontend.Services.WebSocketClient).Assembly);
 
 // Start metrics collection using PeriodicTimer
 var cpuCollector = app.Services.GetRequiredService<CpuCollector>();
