@@ -1,0 +1,285 @@
+using SkiaSharp;
+
+namespace Frontend.Rendering;
+
+/// <summary>
+/// Renders time-series line chart with time axis.
+/// </summary>
+public sealed class TimeSeriesChart : ChartBase
+{
+    private readonly SKPaint _axisPaint;
+    private readonly List<(string Label, float[] Data, SKColor Color)> _dataSeries = new();
+
+    private string _title = "Time Series";
+    private int _maxDataPoints = 120;
+    private int _collectionIntervalMs = 500;
+    private float _minValue = 0f;
+    private float _maxValue = 100f;
+    private bool _useDynamicScale = false;
+
+    public TimeSeriesChart()
+    {
+        _axisPaint = new SKPaint
+        {
+            Color = new SKColor(150, 150, 150),
+            StrokeWidth = 2f,
+            IsAntialias = false,
+            Style = SKPaintStyle.Stroke
+        };
+    }
+
+    /// <summary>
+    /// Sets the data for the time series chart (single series).
+    /// </summary>
+    public void SetData(string title, float[] dataPoints, int maxDataPoints, int collectionIntervalMs = 500)
+    {
+        _title = title;
+        _maxDataPoints = maxDataPoints;
+        _collectionIntervalMs = collectionIntervalMs;
+        _dataSeries.Clear();
+        _dataSeries.Add((title, dataPoints, new SKColor(100, 255, 100))); // Green
+        _useDynamicScale = false;
+        _minValue = 0f;
+        _maxValue = 100f;
+    }
+
+    /// <summary>
+    /// Sets the data for the time series chart with multiple series and dynamic scaling.
+    /// </summary>
+    public void SetMultiSeriesData(string title, (string Label, float[] Data, SKColor Color)[] series, int maxDataPoints, int collectionIntervalMs, bool useDynamicScale = false)
+    {
+        _title = title;
+        _maxDataPoints = maxDataPoints;
+        _collectionIntervalMs = collectionIntervalMs;
+        _dataSeries.Clear();
+        _dataSeries.AddRange(series);
+        _useDynamicScale = useDynamicScale;
+
+        if (_useDynamicScale)
+        {
+            CalculateDynamicScale();
+        }
+        else
+        {
+            _minValue = 0f;
+            _maxValue = 100f;
+        }
+    }
+
+    /// <summary>
+    /// Recalculate min/max for dynamic scaling based on current data.
+    /// </summary>
+    public void UpdateDynamicScale()
+    {
+        if (_useDynamicScale)
+        {
+            CalculateDynamicScale();
+        }
+    }
+
+    private void CalculateDynamicScale()
+    {
+        if (_dataSeries.Count == 0)
+        {
+            _minValue = 0f;
+            _maxValue = 100f;
+            return;
+        }
+
+        float min = float.MaxValue;
+        float max = float.MinValue;
+
+        foreach (var series in _dataSeries)
+        {
+            foreach (var value in series.Data)
+            {
+                if (value < min) min = value;
+                if (value > max) max = value;
+            }
+        }
+
+        // Add 10% padding
+        float range = max - min;
+        if (range < 0.01f) range = 1f; // Minimum range
+
+        _minValue = Math.Max(0, min - range * 0.1f);
+        _maxValue = max + range * 0.1f;
+    }
+
+    protected override void RenderContent(SKCanvas canvas)
+    {
+        if (_dataSeries.Count == 0 || _dataSeries[0].Data.Length == 0)
+            return;
+
+        var bounds = Bounds;
+
+        // Title
+        canvas.DrawText(_title, bounds.Left + 20, bounds.Top + 30, TitleFont, TextPaint);
+
+        // Define graph area
+        float marginLeft = 60f;
+        float marginRight = 20f;
+        float marginTop = 50f;
+        float marginBottom = 40f;
+
+        var graphBounds = new SKRect(
+            bounds.Left + marginLeft,
+            bounds.Top + marginTop,
+            bounds.Right - marginRight,
+            bounds.Bottom - marginBottom
+        );
+
+        // Draw axes
+        DrawAxes(canvas, graphBounds);
+
+        // Draw grid
+        DrawGrid(canvas, graphBounds);
+
+        // Draw data lines for all series
+        DrawDataLines(canvas, graphBounds);
+
+        // Draw time labels
+        DrawTimeLabels(canvas, graphBounds);
+
+        // Draw value labels
+        DrawValueLabels(canvas, graphBounds);
+    }
+
+    private void DrawAxes(SKCanvas canvas, SKRect bounds)
+    {
+        // Y-axis
+        canvas.DrawLine(bounds.Left, bounds.Top, bounds.Left, bounds.Bottom, _axisPaint);
+
+        // X-axis
+        canvas.DrawLine(bounds.Left, bounds.Bottom, bounds.Right, bounds.Bottom, _axisPaint);
+    }
+
+    private void DrawGrid(SKCanvas canvas, SKRect bounds)
+    {
+        // Horizontal grid lines (25%, 50%, 75%, 100%)
+        for (int i = 1; i <= 4; i++)
+        {
+            float y = bounds.Bottom - (bounds.Height * i / 4f);
+            canvas.DrawLine(bounds.Left, y, bounds.Right, y, GridPaint);
+        }
+
+        // Vertical grid lines (every 15 seconds for 60 second window)
+        for (int i = 1; i < 4; i++)
+        {
+            float x = bounds.Left + (bounds.Width * i / 4f);
+            canvas.DrawLine(x, bounds.Top, x, bounds.Bottom, GridPaint);
+        }
+    }
+
+    private void DrawDataLines(SKCanvas canvas, SKRect bounds)
+    {
+        float xStep = bounds.Width / (_maxDataPoints - 1);
+        float valueRange = _maxValue - _minValue;
+        if (valueRange < 0.01f) valueRange = 1f;
+
+        foreach (var series in _dataSeries)
+        {
+            if (series.Data.Length < 2)
+                continue;
+
+            using var linePaint = new SKPaint
+            {
+                Color = series.Color,
+                IsAntialias = true,
+                Style = SKPaintStyle.Stroke,
+                StrokeWidth = 2f
+            };
+
+            using var fillPaint = new SKPaint
+            {
+                Color = new SKColor(series.Color.Red, series.Color.Green, series.Color.Blue, 40),
+                IsAntialias = true,
+                Style = SKPaintStyle.Fill
+            };
+
+            using var path = new SKPath();
+            using var fillPath = new SKPath();
+
+            int startIndex = Math.Max(0, series.Data.Length - _maxDataPoints);
+
+            // Start fill path from bottom-left
+            fillPath.MoveTo(bounds.Left, bounds.Bottom);
+
+            bool firstPoint = true;
+            for (int i = 0; i < series.Data.Length && i < _maxDataPoints; i++)
+            {
+                float value = series.Data[startIndex + i];
+                float normalizedValue = (value - _minValue) / valueRange;
+                normalizedValue = Math.Clamp(normalizedValue, 0f, 1f);
+
+                float x = bounds.Left + (i * xStep);
+                float y = bounds.Bottom - (bounds.Height * normalizedValue);
+
+                if (firstPoint)
+                {
+                    path.MoveTo(x, y);
+                    fillPath.LineTo(x, y);
+                    firstPoint = false;
+                }
+                else
+                {
+                    path.LineTo(x, y);
+                    fillPath.LineTo(x, y);
+                }
+            }
+
+            // Complete fill path
+            int numPoints = Math.Min(series.Data.Length, _maxDataPoints);
+            fillPath.LineTo(bounds.Left + ((numPoints - 1) * xStep), bounds.Bottom);
+            fillPath.Close();
+
+            // Draw fill first, then line on top
+            canvas.DrawPath(fillPath, fillPaint);
+            canvas.DrawPath(path, linePaint);
+        }
+    }
+
+    private void DrawTimeLabels(SKCanvas canvas, SKRect bounds)
+    {
+        // Time window in seconds (samples * interval in ms / 1000)
+        float totalSeconds = _maxDataPoints * (_collectionIntervalMs / 1000f);
+
+        // Draw labels at 0s, 25%, 50%, 75%, 100%
+        for (int i = 0; i <= 4; i++)
+        {
+            float seconds = totalSeconds * i / 4f;
+            float x = bounds.Left + (bounds.Width * i / 4f);
+            string label = $"-{totalSeconds - seconds:F0}s";
+
+            canvas.DrawText(label, x - 15, bounds.Bottom + 20, TextFont, TextPaint);
+        }
+    }
+
+    private void DrawValueLabels(SKCanvas canvas, SKRect bounds)
+    {
+        // Draw labels at min, 25%, 50%, 75%, max
+        for (int i = 0; i <= 4; i++)
+        {
+            float fraction = i / 4f;
+            float value = _minValue + (_maxValue - _minValue) * fraction;
+            float y = bounds.Bottom - (bounds.Height * i / 4f);
+
+            // Format based on magnitude
+            string label;
+            if (value >= 1000)
+                label = $"{value / 1000f:F1}K";
+            else if (value >= 1)
+                label = $"{value:F1}";
+            else
+                label = $"{value:F2}";
+
+            canvas.DrawText(label, bounds.Left - 45, y + 5, TextFont, TextPaint);
+        }
+    }
+
+    public override void Dispose()
+    {
+        _axisPaint.Dispose();
+        base.Dispose();
+    }
+}
