@@ -3,7 +3,7 @@ using ModelingEvolution;
 using ModelingEvolution.JsonParsableConverter;
 using System.Text.Json.Serialization;
 
-namespace Frontend.Models;
+namespace ModelingEvolution.BlazorPerfMon.Shared;
 
 /// <summary>
 /// Describes a single metric source (CPU, GPU, Network interface, Disk, etc.).

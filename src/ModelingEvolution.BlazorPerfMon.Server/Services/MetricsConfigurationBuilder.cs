@@ -1,7 +1,7 @@
 using Backend.Collectors;
 using Backend.Core;
-using Frontend.Models;
 using Microsoft.Extensions.Options;
+using ModelingEvolution.BlazorPerfMon.Shared;
 
 namespace Backend.Services;
 

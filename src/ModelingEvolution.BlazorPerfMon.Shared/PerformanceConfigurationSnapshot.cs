@@ -1,6 +1,6 @@
 using MessagePack;
 
-namespace Frontend.Models;
+namespace ModelingEvolution.BlazorPerfMon.Shared;
 
 /// <summary>
 /// Configuration snapshot sent once at the beginning of the WebSocket connection.

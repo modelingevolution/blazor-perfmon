@@ -12,11 +12,11 @@ namespace Backend.Services;
 /// </summary>
 public sealed class MultiplexService : IDisposable
 {
-    private readonly BufferBlock<(float[] CpuLoads, float[] GpuLoads, RamMetrics Ram, uint TimestampMs)> _cpuGpuBuffer;
+    private readonly BufferBlock<(float[] CpuLoads, float[] GpuLoads, RamMetric Ram, uint TimestampMs)> _cpuGpuBuffer;
     private readonly BufferBlock<(NetworkMetric[] Metrics, uint CollectionTimeMs)> _networkBuffer;
     private readonly BufferBlock<(ulong ReadBytes, ulong WriteBytes, uint ReadIops, uint WriteIops)> _diskBuffer;
-    private readonly JoinBlock<(float[], float[], RamMetrics, uint), (NetworkMetric[], uint), (ulong ReadBytes, ulong WriteBytes, uint ReadIops, uint WriteIops)> _joinBlock;
-    private readonly TransformBlock<Tuple<(float[], float[], RamMetrics, uint), (NetworkMetric[], uint), (ulong, ulong, uint, uint)>, byte[]> _serializeBlock;
+    private readonly JoinBlock<(float[], float[], RamMetric, uint), (NetworkMetric[], uint), (ulong ReadBytes, ulong WriteBytes, uint ReadIops, uint WriteIops)> _joinBlock;
+    private readonly TransformBlock<Tuple<(float[], float[], RamMetric, uint), (NetworkMetric[], uint), (ulong, ulong, uint, uint)>, byte[]> _serializeBlock;
     private readonly BroadcastBlock<byte[]> _broadcastBlock;
 
     private int _clientCount = 0;
@@ -34,7 +34,7 @@ public sealed class MultiplexService : IDisposable
     public MultiplexService()
     {
         // Stage 4: Separate buffers for CPU+GPU+RAM (with timestamp), Network (with collection time), and Disk
-        _cpuGpuBuffer = new BufferBlock<(float[], float[], RamMetrics, uint)>(new DataflowBlockOptions
+        _cpuGpuBuffer = new BufferBlock<(float[], float[], RamMetric, uint)>(new DataflowBlockOptions
         {
             BoundedCapacity = 2
         });
@@ -50,13 +50,13 @@ public sealed class MultiplexService : IDisposable
         });
 
         // JoinBlock: Wait for CPU+GPU+RAM (with timestamp), Network (with collection time), and Disk data before proceeding
-        _joinBlock = new JoinBlock<(float[], float[], RamMetrics, uint), (NetworkMetric[], uint), (ulong, ulong, uint, uint)>(new GroupingDataflowBlockOptions
+        _joinBlock = new JoinBlock<(float[], float[], RamMetric, uint), (NetworkMetric[], uint), (ulong, ulong, uint, uint)>(new GroupingDataflowBlockOptions
         {
             BoundedCapacity = 2
         });
 
         // Transform block: Serialize combined data to MessagePack
-        _serializeBlock = new TransformBlock<Tuple<(float[], float[], RamMetrics, uint), (NetworkMetric[], uint), (ulong, ulong, uint, uint)>, byte[]>(
+        _serializeBlock = new TransformBlock<Tuple<(float[], float[], RamMetric, uint), (NetworkMetric[], uint), (ulong, ulong, uint, uint)>, byte[]>(
             combinedData =>
             {
                 var (cpuGpuRamData, networkData, diskData) = combinedData;
@@ -65,26 +65,26 @@ public sealed class MultiplexService : IDisposable
                 var (readBytes, writeBytes, readIops, writeIops) = diskData;
 
                 // Convert server-side NetworkMetric to shared NetworkMetric for serialization
-                var sharedNetworkMetrics = networkMetrics.Select(n => new Frontend.Models.NetworkMetric
+                var sharedNetworkMetrics = networkMetrics.Select(n => new NetworkMetric
                 {
                     Identifier = n.Identifier,
                     RxBytes = n.RxBytes,
                     TxBytes = n.TxBytes
                 }).ToArray();
 
-                var sample = new Frontend.Models.MetricSample
+                var sample = new MetricSample
                 {
                     CreatedAt = timestampMs,
                     GpuLoads = gpuLoads,
                     CpuLoads = cpuLoads,
-                    Ram = new Frontend.Models.RamMetric
+                    Ram = new RamMetric
                     {
                         UsedBytes = ram.UsedBytes,
                         TotalBytes = ram.TotalBytes
                     },
                     DiskMetrics = new[]
                     {
-                        new Frontend.Models.DiskMetric
+                        new DiskMetric
                         {
                             ReadBytes = readBytes,
                             WriteBytes = writeBytes,
@@ -119,7 +119,7 @@ public sealed class MultiplexService : IDisposable
     /// Post CPU, GPU, and RAM metrics to the pipeline with timestamp.
     /// Returns false if the buffer is full (backpressure).
     /// </summary>
-    public bool PostCpuGpuRamMetrics(float[] cpuData, float[] gpuLoads, RamMetrics ram, uint timestampMs)
+    public bool PostCpuGpuRamMetrics(float[] cpuData, float[] gpuLoads, RamMetric ram, uint timestampMs)
     {
         return _cpuGpuBuffer.Post((cpuData, gpuLoads, ram, timestampMs));
     }

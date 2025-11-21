@@ -6,7 +6,7 @@ namespace Backend.Collectors;
 /// Collects RAM usage statistics by reading /proc/meminfo.
 /// Returns percentage used and absolute byte values (used and total).
 /// </summary>
-public sealed class RamCollector : IMetricsCollector<RamMetrics>
+public sealed class RamCollector : IMetricsCollector<RamMetric>
 {
     private const string ProcMeminfoPath = "/proc/meminfo";
 
@@ -14,7 +14,7 @@ public sealed class RamCollector : IMetricsCollector<RamMetrics>
     /// Collects current RAM usage.
     /// Returns RamMetrics with percentage, used bytes, and total bytes.
     /// </summary>
-    public RamMetrics Collect()
+    public RamMetric Collect()
     {
         try
         {
@@ -44,9 +44,9 @@ public sealed class RamCollector : IMetricsCollector<RamMetrics>
 
             if (memTotal == 0)
             {
-                return new RamMetrics
+                return new RamMetric
                 {
-                    UsedPercent = 0f,
+                 
                     UsedBytes = 0,
                     TotalBytes = 0
                 };
@@ -59,9 +59,9 @@ public sealed class RamCollector : IMetricsCollector<RamMetrics>
             float usedPercent = (float)memUsed / memTotal * 100f;
             usedPercent = Math.Clamp(usedPercent, 0f, 100f);
 
-            return new RamMetrics
+            return new RamMetric
             {
-                UsedPercent = usedPercent,
+                
                 UsedBytes = memUsed,
                 TotalBytes = memTotal
             };
@@ -69,9 +69,9 @@ public sealed class RamCollector : IMetricsCollector<RamMetrics>
         catch (Exception ex)
         {
             Console.WriteLine($"Error reading RAM stats: {ex.Message}");
-            return new RamMetrics
+            return new RamMetric
             {
-                UsedPercent = 0f,
+                
                 UsedBytes = 0,
                 TotalBytes = 0
             };

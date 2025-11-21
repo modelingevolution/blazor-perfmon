@@ -1,6 +1,6 @@
 using MessagePack;
 
-namespace Frontend.Models;
+namespace ModelingEvolution.BlazorPerfMon.Shared;
 
 /// <summary>
 /// Single sample containing ALL metrics at one point in time (vertical layout).

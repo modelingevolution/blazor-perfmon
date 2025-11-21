@@ -1,5 +1,5 @@
 using Frontend.Collections;
-using Frontend.Models;
+using ModelingEvolution.BlazorPerfMon.Shared;
 
 namespace Frontend.Services;
 

@@ -1,6 +1,6 @@
 using MessagePack;
 
-namespace Frontend.Models;
+namespace ModelingEvolution.BlazorPerfMon.Shared;
 
 /// <summary>
 /// Disk I/O metrics.

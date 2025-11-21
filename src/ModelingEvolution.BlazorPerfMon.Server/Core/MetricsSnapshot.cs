@@ -1,5 +1,5 @@
 using MessagePack;
-using Frontend.Models;
+using ModelingEvolution.BlazorPerfMon.Shared;
 
 namespace Backend.Core;
 

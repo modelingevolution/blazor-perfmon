@@ -1,6 +1,6 @@
 using System.Net.WebSockets;
 using MessagePack;
-using Frontend.Models;
+using ModelingEvolution.BlazorPerfMon.Shared;
 
 namespace Frontend.Services;
 

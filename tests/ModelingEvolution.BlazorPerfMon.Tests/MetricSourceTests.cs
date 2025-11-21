@@ -1,5 +1,5 @@
 using System.Text.Json;
-using Frontend.Models;
+using ModelingEvolution.BlazorPerfMon.Shared;
 
 namespace ModelingEvolution.BlazorPerfMon.Tests;
 
