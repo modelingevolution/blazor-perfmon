@@ -85,7 +85,7 @@ public class MetricSourceTests
 
         // Assert
         // Should serialize as compact string using IParsable format
-        Assert.Equal("\"Network.eth0/2\"", json);
+        Assert.Equal("\"Network:eth0/2\"", json);
     }
 
     [Fact]
@@ -107,7 +107,7 @@ public class MetricSourceTests
     public void JsonDeserialization_CompactStringWithIdentifier_CreatesCorrectObject()
     {
         // Arrange
-        string json = "\"Network.eth0/2\"";
+        string json = "\"Network:eth0/2\"";
 
         // Act
         var metric = JsonSerializer.Deserialize<MetricSource>(json);
@@ -179,16 +179,16 @@ public class MetricSourceTests
         string result = metric.ToString();
 
         // Assert
-        Assert.Equal("Network.eth0/2", result);
+        Assert.Equal("Network:eth0/2", result);
     }
 
     [Theory]
     [InlineData("CPU/16", "CPU", null, 16u)]
     [InlineData("GPU/8", "GPU", null, 8u)]
     [InlineData("RAM/1", "RAM", null, 1u)]
-    [InlineData("Network.eth0/2", "Network", "eth0", 2u)]
-    [InlineData("Network.wlan0/2", "Network", "wlan0", 2u)]
-    [InlineData("Disk.sda/2", "Disk", "sda", 2u)]
+    [InlineData("Network:eth0/2", "Network", "eth0", 2u)]
+    [InlineData("Network:wlan0/2", "Network", "wlan0", 2u)]
+    [InlineData("Disk:sda/2", "Disk", "sda", 2u)]
     public void Parse_ValidFormats_ProducesCorrectObjects(string input, string expectedName, string? expectedIdentifier, uint expectedCount)
     {
         // Act
@@ -206,7 +206,7 @@ public class MetricSourceTests
     [InlineData("CPU")]
     [InlineData("CPU/")]
     [InlineData("CPU/abc")]
-    [InlineData("CPU.eth0.extra/2")]
+    [InlineData("CPU:eth0:extra/2")]
     public void Parse_InvalidFormats_ThrowsFormatException(string input)
     {
         // Act & Assert
@@ -230,7 +230,7 @@ public class MetricSourceTests
 
     [Theory]
     [InlineData("CPU/16", true)]
-    [InlineData("Network.eth0/2", true)]
+    [InlineData("Network:eth0/2", true)]
     [InlineData("", false)]
     [InlineData("invalid", false)]
     [InlineData("CPU/", false)]

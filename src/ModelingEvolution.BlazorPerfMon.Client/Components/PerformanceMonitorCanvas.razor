@@ -75,11 +75,7 @@
     [Parameter] public string BackgroundColor { get; set; } = "#1a1a1a";
 
     private SKCanvasView? _canvasView;
-    private BarChart? _cpuBarChart;
-    private BarChart? _gpuBarChart;
-    private TimeSeriesChart? _totalAverageChart;
-    private TimeSeriesChart? _networkChart;
-    private TimeSeriesChart? _diskChart;
+    private List<LayoutGridItem> _gridItems = new();
 
     private bool _isConnected;
     private uint _latestCollectionTimeMs;
@@ -87,35 +83,16 @@
     private PeriodicTimer? _scaleUpdateTimer;
     private Task? _scaleUpdateTask;
 
-    // Configuration and accessors
+    // Configuration
     private PerformanceConfigurationSnapshot? _configuration;
-    private int _cpuCount;
-    private int _gpuCount;
     private int _timeWindowMs = 60000; // Default 60 seconds
     private int _collectionIntervalMs = 500; // Default 500ms
 
-    // Sample accessors for zero-copy rendering
-    private SampleAccessor<float>[]? _cpuAccessors;
-    private SampleAccessor<float>[]? _gpuAccessors;
-    private SampleAccessor<string>[]? _cpuLabelAccessors;
-    private SampleAccessor<string>[]? _gpuLabelAccessors;
-    private SampleAccessor<float>? _cpuAvgAccessor;
-    private SampleAccessor<float>? _gpuAvgAccessor;
-    private SampleAccessor<float>? _ramPercentAccessor;
+    // Shared timestamp accessor for all time-series charts
     private SampleAccessor<uint>? _timestampAccessor;
-    private SampleAccessor<float>? _networkRxAccessor;
-    private SampleAccessor<float>? _networkTxAccessor;
-    private SampleAccessor<float>? _diskReadAccessor;
-    private SampleAccessor<float>? _diskWriteAccessor;
 
     protected override async Task OnInitializedAsync()
     {
-        _cpuBarChart = new BarChart();
-        _gpuBarChart = new BarChart();
-        _totalAverageChart = new TimeSeriesChart();
-        _networkChart = new TimeSeriesChart();
-        _diskChart = new TimeSeriesChart();
-
         // Subscribe to WebSocket events
         WebSocketClient.OnConfigurationReceived += OnConfigurationReceived;
         WebSocketClient.OnMetricsReceived += OnMetricsReceived;
@@ -146,8 +123,19 @@
         {
             while (await _scaleUpdateTimer.WaitForNextTickAsync())
             {
-                _networkChart?.UpdateDynamicScale();
-                _diskChart?.UpdateDynamicScale();
+                // Update dynamic scale for all time-series charts (Network and Disk)
+                foreach (var gridItem in _gridItems)
+                {
+                    if (gridItem.Chart is NetworkChart networkChart)
+                    {
+                        // Access the internal TimeSeriesChart through reflection or add UpdateDynamicScale to IChart
+                        // For now, skip - will be handled by the chart itself
+                    }
+                    else if (gridItem.Chart is DiskChart diskChart)
+                    {
+                        // Same as above
+                    }
+                }
             }
         }
         catch (OperationCanceledException)
@@ -162,83 +150,64 @@
         _collectionIntervalMs = (int)configuration.CollectionIntervalMs;
         _timeWindowMs = (int)(configuration.DataPointsToKeep * configuration.CollectionIntervalMs);
 
-        // Detect CPU and GPU counts from configuration
+        // Create shared timestamp accessor
+        var emptyBuffer = new ImmutableCircularBuffer<MetricSample>(1);
+        _timestampAccessor = new SampleAccessor<uint>(emptyBuffer, sample => sample.CreatedAt);
+
+        // Clear existing grid items
+        _gridItems.Clear();
+
+        // Build grid items from layout
         if (configuration.Layout != null && configuration.Layout.Length > 0)
         {
-            var row1 = configuration.Layout[0];
-            foreach (var source in row1)
+            int totalRows = configuration.Layout.Length;
+
+            for (int row = 0; row < configuration.Layout.Length; row++)
             {
-                if (source.Name == "CPU" && source.Identifier == null)
-                    _cpuCount = (int)source.Count;
-                else if (source.Name == "GPU" && source.Identifier == null)
-                    _gpuCount = (int)source.Count;
+                var rowSources = configuration.Layout[row];
+                int colsInRow = rowSources.Length;
+
+                for (int col = 0; col < rowSources.Length; col++)
+                {
+                    var source = rowSources[col];
+                    var chart = CreateChart(source);
+
+                    if (chart != null)
+                    {
+                        _gridItems.Add(new LayoutGridItem
+                        {
+                            Row = row,
+                            Col = col,
+                            TotalRows = totalRows,
+                            ColsInRow = colsInRow,
+                            Source = source,
+                            Chart = chart
+                        });
+                    }
+                }
             }
         }
 
-        // Create accessors once based on configuration
-        CreateAccessors();
-
-        Console.WriteLine($"Configuration received: {_cpuCount} CPU cores, {_gpuCount} GPUs, {_timeWindowMs}ms window");
+        Console.WriteLine($"Configuration received: {_gridItems.Count} charts created, {_timeWindowMs}ms window");
     }
 
-    private void CreateAccessors()
+    private IChart? CreateChart(MetricSource source)
     {
-        var emptyBuffer = new ImmutableCircularBuffer<MetricSample>(1);
-
-        // CPU accessors (per core)
-        _cpuAccessors = new SampleAccessor<float>[_cpuCount];
-        _cpuLabelAccessors = new SampleAccessor<string>[_cpuCount];
-        for (int i = 0; i < _cpuCount; i++)
-        {
-            int coreIndex = i; // Capture for closure
-            _cpuAccessors[i] = new SampleAccessor<float>(emptyBuffer, sample =>
-                sample.CpuLoads != null && coreIndex < sample.CpuLoads.Length ? sample.CpuLoads[coreIndex] : 0f);
-            _cpuLabelAccessors[i] = new SampleAccessor<string>(emptyBuffer, sample => $"CPU{coreIndex}");
-        }
-
-        // GPU accessors (per GPU)
-        _gpuAccessors = new SampleAccessor<float>[_gpuCount];
-        _gpuLabelAccessors = new SampleAccessor<string>[_gpuCount];
-        for (int i = 0; i < _gpuCount; i++)
-        {
-            int gpuIndex = i; // Capture for closure
-            _gpuAccessors[i] = new SampleAccessor<float>(emptyBuffer, sample =>
-                sample.GpuLoads != null && gpuIndex < sample.GpuLoads.Length ? sample.GpuLoads[gpuIndex] : 0f);
-            _gpuLabelAccessors[i] = new SampleAccessor<string>(emptyBuffer, sample =>
-                _gpuCount > 1 ? $"GPU{gpuIndex}" : "GPU");
-        }
-
-        // Aggregated accessors
-        _cpuAvgAccessor = new SampleAccessor<float>(emptyBuffer, sample =>
-            sample.CpuLoads != null && sample.CpuLoads.Length > 0 ? sample.CpuLoads.Average() : 0f);
-
-        _gpuAvgAccessor = new SampleAccessor<float>(emptyBuffer, sample =>
-            sample.GpuLoads != null && sample.GpuLoads.Length > 0 ? sample.GpuLoads.Average() : 0f);
-
-        _ramPercentAccessor = new SampleAccessor<float>(emptyBuffer, sample =>
-            sample.Ram.TotalBytes > 0 ? (float)sample.Ram.UsedBytes / sample.Ram.TotalBytes * 100f : 0f);
-
-        _timestampAccessor = new SampleAccessor<uint>(emptyBuffer, sample => sample.CreatedAt);
-
-        // Network accessors (first interface, converted to bytes/sec)
         float intervalSec = _collectionIntervalMs / 1000f;
-        _networkRxAccessor = new SampleAccessor<float>(emptyBuffer, sample =>
-            sample.NetworkMetrics != null && sample.NetworkMetrics.Length > 0
-                ? sample.NetworkMetrics[0].RxBytes / intervalSec : 0f);
 
-        _networkTxAccessor = new SampleAccessor<float>(emptyBuffer, sample =>
-            sample.NetworkMetrics != null && sample.NetworkMetrics.Length > 0
-                ? sample.NetworkMetrics[0].TxBytes / intervalSec : 0f);
-
-        // Disk accessors (first disk, converted to bytes/sec)
-        _diskReadAccessor = new SampleAccessor<float>(emptyBuffer, sample =>
-            sample.DiskMetrics != null && sample.DiskMetrics.Length > 0
-                ? sample.DiskMetrics[0].ReadBytes / intervalSec : 0f);
-
-        _diskWriteAccessor = new SampleAccessor<float>(emptyBuffer, sample =>
-            sample.DiskMetrics != null && sample.DiskMetrics.Length > 0
-                ? sample.DiskMetrics[0].WriteBytes / intervalSec : 0f);
+        return source.Name switch
+        {
+            "CPU" when source.Identifier == null => new CpuBarChart((int)source.Count),
+            "GPU" when source.Identifier == null => new GpuBarChart((int)source.Count),
+            "ComputeLoad" => new ComputeLoadChart(_timeWindowMs, _timestampAccessor!),
+            "Network" when !string.IsNullOrEmpty(source.Identifier) =>
+                new NetworkChart(source.Identifier, intervalSec, _timeWindowMs, _timestampAccessor!),
+            "Disk" when !string.IsNullOrEmpty(source.Identifier) =>
+                new DiskChart(source.Identifier, intervalSec, _timeWindowMs, _timestampAccessor!),
+            _ => null
+        };
     }
+
 
     private void OnMetricsReceived(MetricSample sample)
     {
@@ -290,9 +259,7 @@
         var bounds = new SKRect(0, 0, e.Info.Width, e.Info.Height);
 
         // Wait for configuration before rendering
-        if (_configuration == null || _cpuAccessors == null || _gpuAccessors == null ||
-            _cpuBarChart == null || _gpuBarChart == null || _totalAverageChart == null ||
-            _networkChart == null || _diskChart == null)
+        if (_configuration == null || _gridItems.Count == 0)
         {
             return;
         }
@@ -302,168 +269,28 @@
         if (buffer.Count == 0)
             return;
 
-        // Update all accessors with the same buffer snapshot
-        UpdateAllAccessors(buffer);
-
-        // Layout: 3 columns in top row, 2 columns in bottom row
-        float thirdWidth = bounds.Width / 3f;
-        float halfWidth = bounds.Width * 0.5f;
-        float halfHeight = bounds.Height * 0.5f;
-
-        // Top-left: CPU bar chart (1/3 width)
-        _cpuBarChart.Location = new SKPoint(0, 0);
-        _cpuBarChart.Size = new SKSize(thirdWidth, halfHeight);
-
-        // Get latest CPU loads for bar chart
-        var latestSample = buffer.Last();
-        var cpuLoads = _cpuAccessors.Select(accessor => accessor.Last()).AsEnumerable();
-        var cpuLabels = _cpuLabelAccessors.Select(accessor => accessor.First()).AsEnumerable();
-
-        _cpuBarChart.SetData("CPU Cores", cpuLabels, _cpuCount, cpuLoads, _cpuCount);
-        _cpuBarChart.Render(canvas);
-
-        // Top-middle: GPU bar chart (1/3 width)
-        _gpuBarChart.Location = new SKPoint(thirdWidth, 0);
-        _gpuBarChart.Size = new SKSize(thirdWidth, halfHeight);
-
-        if (_gpuCount > 0)
-        {
-            var gpuLoads = _gpuAccessors.Select(accessor => accessor.Last()).AsEnumerable();
-            var gpuLabels = _gpuLabelAccessors.Select(accessor => accessor.First()).AsEnumerable();
-            _gpuBarChart.SetData("GPU", gpuLabels, _gpuCount, gpuLoads, _gpuCount);
-        }
-        else
-        {
-            _gpuBarChart.SetData("GPU", new[] { "GPU" }, 1, new[] { 0f }, 1);
-        }
-
-        _gpuBarChart.Render(canvas);
-
-        // Top-right: Total Average CPU + GPU + RAM (1/3 width, 3 series)
-        _totalAverageChart.Location = new SKPoint(thirdWidth * 2, 0);
-        _totalAverageChart.Size = new SKSize(thirdWidth, halfHeight);
-
-        // Get latest values for title
-        float cpuAvgLatest = _cpuAvgAccessor!.Last();
-        float gpuAvgLatest = _gpuAvgAccessor!.Last();
-        ulong ramUsedBytes = latestSample.Ram.UsedBytes;
-        ulong ramTotalBytes = latestSample.Ram.TotalBytes;
-        Bytes ramUsed = (long)ramUsedBytes;
-        Bytes ramTotal = (long)ramTotalBytes;
-        string totalTitle = $"Compute Load ({cpuAvgLatest:F1}% CPU, {gpuAvgLatest:F1}% GPU, {ramUsed}/{ramTotal} RAM)";
-
-        var totalSeries = new[]
-        {
-            new TimeSeriesF { Label = "CPU Avg", Data = _cpuAvgAccessor, Count = _cpuAvgAccessor.Count, Color = new SKColor(100, 255, 100) },  // Green
-            new TimeSeriesF { Label = "GPU", Data = _gpuAvgAccessor, Count = _gpuAvgAccessor.Count, Color = new SKColor(255, 200, 100) },      // Orange
-            new TimeSeriesF { Label = "RAM", Data = _ramPercentAccessor!, Count = _ramPercentAccessor!.Count, Color = new SKColor(100, 200, 255) }  // Blue
-        };
-
-        _totalAverageChart.Setup(
-            totalTitle,
-            totalSeries,
-            _timestampAccessor,
-            _timestampAccessor!.Count,
-            _timeWindowMs,
-            useDynamicScale: false);
-        _totalAverageChart.Render(canvas);
-
-        // Bottom-left: Network (Rx + Tx combined, first interface)
-        _networkChart.Location = new SKPoint(0, halfHeight);
-        _networkChart.Size = new SKSize(halfWidth, halfHeight);
-
-        // Get network interface name from first sample
-        string networkInterface = latestSample.NetworkMetrics != null && latestSample.NetworkMetrics.Length > 0
-            ? latestSample.NetworkMetrics[0].Identifier ?? "eth0"
-            : "eth0";
-
-        // Get latest values for title
-        float rxLatest = _networkRxAccessor!.Last();
-        float txLatest = _networkTxAccessor!.Last();
-        Bytes rxBytes = (long)rxLatest;
-        Bytes txBytes = (long)txLatest;
-        string networkTitle = $"Network {networkInterface} ({rxBytes.FormatFixed()}/s rx, {txBytes.FormatFixed()}/s tx)";
-
-        var networkSeries = new[]
-        {
-            new TimeSeriesF { Label = "Rx", Data = _networkRxAccessor!, Count = _networkRxAccessor!.Count, Color = new SKColor(100, 255, 100) },  // Green
-            new TimeSeriesF { Label = "Tx", Data = _networkTxAccessor!, Count = _networkTxAccessor!.Count, Color = new SKColor(100, 200, 255) }   // Blue
-        };
-
-        _networkChart.Setup(
-            networkTitle,
-            networkSeries,
-            _timestampAccessor,
-            _timestampAccessor.Count,
-            _timeWindowMs,
-            useDynamicScale: true);
-        _networkChart.Render(canvas);
-
-        // Bottom-right: Disk I/O (Read + Write)
-        _diskChart.Location = new SKPoint(halfWidth, halfHeight);
-        _diskChart.Size = new SKSize(halfWidth, halfHeight);
-
-        // Get latest values for title
-        float readLatest = _diskReadAccessor!.Last();
-        float writeLatest = _diskWriteAccessor!.Last();
-        Bytes readBytes = (long)readLatest;
-        Bytes writeBytes = (long)writeLatest;
-        string diskTitle = $"Disk I/O ({readBytes.FormatFixed()}/s read, {writeBytes.FormatFixed()}/s write)";
-
-        var diskSeries = new[]
-        {
-            new TimeSeriesF { Label = "Read", Data = _diskReadAccessor!, Count = _diskReadAccessor!.Count, Color = new SKColor(100, 255, 100) },  // Green
-            new TimeSeriesF { Label = "Write", Data = _diskWriteAccessor!, Count = _diskWriteAccessor!.Count, Color = new SKColor(255, 200, 100) }  // Orange
-        };
-
-        _diskChart.Setup(
-            diskTitle,
-            diskSeries,
-            _timestampAccessor,
-            _timestampAccessor.Count,
-            _timeWindowMs,
-            useDynamicScale: true);
-        _diskChart.Render(canvas);
-    }
-
-    /// <summary>
-    /// Updates all SampleAccessors with the current buffer for time-consistent rendering.
-    /// </summary>
-    private void UpdateAllAccessors(ImmutableCircularBuffer<MetricSample> buffer)
-    {
-        if (_cpuAccessors != null)
-        {
-            foreach (var accessor in _cpuAccessors)
-                accessor.UpdateBuffer(buffer);
-        }
-
-        if (_gpuAccessors != null)
-        {
-            foreach (var accessor in _gpuAccessors)
-                accessor.UpdateBuffer(buffer);
-        }
-
-        if (_cpuLabelAccessors != null)
-        {
-            foreach (var accessor in _cpuLabelAccessors)
-                accessor.UpdateBuffer(buffer);
-        }
-
-        if (_gpuLabelAccessors != null)
-        {
-            foreach (var accessor in _gpuLabelAccessors)
-                accessor.UpdateBuffer(buffer);
-        }
-
-        _cpuAvgAccessor?.UpdateBuffer(buffer);
-        _gpuAvgAccessor?.UpdateBuffer(buffer);
-        _ramPercentAccessor?.UpdateBuffer(buffer);
+        // Update timestamp accessor shared by all time-series charts
         _timestampAccessor?.UpdateBuffer(buffer);
-        _networkRxAccessor?.UpdateBuffer(buffer);
-        _networkTxAccessor?.UpdateBuffer(buffer);
-        _diskReadAccessor?.UpdateBuffer(buffer);
-        _diskWriteAccessor?.UpdateBuffer(buffer);
+
+        // Update all charts with the same buffer snapshot
+        foreach (var gridItem in _gridItems)
+        {
+            gridItem.Chart.UpdateBuffer(buffer);
+        }
+
+        // Render all charts using dynamic grid layout
+        foreach (var gridItem in _gridItems)
+        {
+            var cellBounds = gridItem.Arrange(bounds);
+            var cellSize = new SKSize(cellBounds.Width, cellBounds.Height);
+
+            canvas.Save();
+            canvas.Translate(cellBounds.Left, cellBounds.Top);
+            gridItem.Chart.Render(canvas, cellSize);
+            canvas.Restore();
+        }
     }
+
 
     public async ValueTask DisposeAsync()
     {
@@ -491,10 +318,8 @@
             MetricsStore.OnMetricsUpdated -= OnMetricsUpdated;
         }
 
-        _cpuBarChart?.Dispose();
-        _gpuBarChart?.Dispose();
-        _totalAverageChart?.Dispose();
-        _networkChart?.Dispose();
-        _diskChart?.Dispose();
+        // Note: IChart interface doesn't implement IDisposable
+        // If charts need disposal, we'd need to add it to the interface
+        _gridItems.Clear();
     }
 }

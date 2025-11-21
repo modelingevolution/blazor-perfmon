@@ -35,7 +35,7 @@ public readonly record struct MetricSource : IParsable<MetricSource>
 
     public override string ToString()
     {
-        return Identifier is null ? $"{Name}/{Count}" : $"{Name}.{Identifier}/{Count}";
+        return Identifier is null ? $"{Name}/{Count}" : $"{Name}:{Identifier}/{Count}";
     }
 
     public static MetricSource Parse(string s, IFormatProvider? provider)
@@ -43,7 +43,7 @@ public readonly record struct MetricSource : IParsable<MetricSource>
         if (TryParse(s, provider, out var result))
             return result;
 
-        throw new FormatException($"Invalid MetricSource format: {s}. Expected format: 'Name/Count' or 'Name.Identifier/Count'");
+        throw new FormatException($"Invalid MetricSource format: {s}. Expected format: 'Name/Count' or 'Name:Identifier/Count'");
     }
 
     public static bool TryParse(string? s, IFormatProvider? provider, out MetricSource result)
@@ -61,8 +61,8 @@ public readonly record struct MetricSource : IParsable<MetricSource>
         if (!uint.TryParse(parts[1], out var count))
             return false;
 
-        // Split name/identifier part by '.'
-        var nameParts = parts[0].Split('.');
+        // Split name/identifier part by ':'
+        var nameParts = parts[0].Split(':');
 
         if (nameParts.Length == 1)
         {
@@ -77,7 +77,7 @@ public readonly record struct MetricSource : IParsable<MetricSource>
         }
         else if (nameParts.Length == 2)
         {
-            // Format: "Name.Identifier/Count"
+            // Format: "Name:Identifier/Count"
             result = new MetricSource
             {
                 Name = nameParts[0],

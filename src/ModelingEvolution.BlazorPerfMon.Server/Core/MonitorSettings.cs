@@ -7,11 +7,13 @@ public sealed class MonitorSettings
 {
     /// <summary>
     /// Network interface to monitor (e.g., eth0, eth1, wlan0).
+    /// Supports comma-separated values for multiple interfaces.
     /// </summary>
     public string NetworkInterface { get; set; } = "eth0";
 
     /// <summary>
     /// Disk device to monitor (e.g., sda, nvme0n1, sdb).
+    /// Supports comma-separated values for multiple disks.
     /// </summary>
     public string DiskDevice { get; set; } = "sda";
 
@@ -26,7 +28,15 @@ public sealed class MonitorSettings
     public int DataPointsToKeep { get; set; } = 120;
 
     /// <summary>
-    /// GPU collector type: "NvSmi" for desktop GPUs, "NvTegra" for Jetson platforms.
+    /// GPU collector type: "NvSmi" for desktop GPUs, "NvTegra" for Jetson platforms, "Nvml" for NVML library.
     /// </summary>
     public string GpuCollectorType { get; set; } = "NvSmi";
+
+    /// <summary>
+    /// Required explicit layout configuration.
+    /// Defines the grid layout of charts to display.
+    /// Format: [["CPU/16", "GPU/8", "ComputeLoad/3"], ["Network:eth0/2"], ["Disk:sda/2"]]
+    /// Strings are parsed into MetricSource structs by MetricsConfigurationBuilder.
+    /// </summary>
+    public required string[][] Layout { get; set; }
 }

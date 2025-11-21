@@ -12,9 +12,9 @@ public sealed class MultiplexService : IDisposable
 {
     private readonly BufferBlock<(float[] CpuLoads, float[] GpuLoads, RamMetric Ram, uint TimestampMs)> _cpuGpuBuffer;
     private readonly BufferBlock<(NetworkMetric[] Metrics, uint CollectionTimeMs)> _networkBuffer;
-    private readonly BufferBlock<(ulong ReadBytes, ulong WriteBytes, uint ReadIops, uint WriteIops)> _diskBuffer;
-    private readonly JoinBlock<(float[], float[], RamMetric, uint), (NetworkMetric[], uint), (ulong ReadBytes, ulong WriteBytes, uint ReadIops, uint WriteIops)> _joinBlock;
-    private readonly TransformBlock<Tuple<(float[], float[], RamMetric, uint), (NetworkMetric[], uint), (ulong, ulong, uint, uint)>, byte[]> _serializeBlock;
+    private readonly BufferBlock<DiskMetric[]> _diskBuffer;
+    private readonly JoinBlock<(float[], float[], RamMetric, uint), (NetworkMetric[], uint), DiskMetric[]> _joinBlock;
+    private readonly TransformBlock<Tuple<(float[], float[], RamMetric, uint), (NetworkMetric[], uint), DiskMetric[]>, byte[]> _serializeBlock;
     private readonly BroadcastBlock<byte[]> _broadcastBlock;
 
     private int _clientCount = 0;
@@ -42,25 +42,24 @@ public sealed class MultiplexService : IDisposable
             BoundedCapacity = 2
         });
 
-        _diskBuffer = new BufferBlock<(ulong, ulong, uint, uint)>(new DataflowBlockOptions
+        _diskBuffer = new BufferBlock<DiskMetric[]>(new DataflowBlockOptions
         {
             BoundedCapacity = 2
         });
 
         // JoinBlock: Wait for CPU+GPU+RAM (with timestamp), Network (with collection time), and Disk data before proceeding
-        _joinBlock = new JoinBlock<(float[], float[], RamMetric, uint), (NetworkMetric[], uint), (ulong, ulong, uint, uint)>(new GroupingDataflowBlockOptions
+        _joinBlock = new JoinBlock<(float[], float[], RamMetric, uint), (NetworkMetric[], uint), DiskMetric[]>(new GroupingDataflowBlockOptions
         {
             BoundedCapacity = 2
         });
 
         // Transform block: Serialize combined data to MessagePack
-        _serializeBlock = new TransformBlock<Tuple<(float[], float[], RamMetric, uint), (NetworkMetric[], uint), (ulong, ulong, uint, uint)>, byte[]>(
+        _serializeBlock = new TransformBlock<Tuple<(float[], float[], RamMetric, uint), (NetworkMetric[], uint), DiskMetric[]>, byte[]>(
             combinedData =>
             {
-                var (cpuGpuRamData, networkData, diskData) = combinedData;
+                var (cpuGpuRamData, networkData, diskMetrics) = combinedData;
                 var (cpuLoads, gpuLoads, ram, timestampMs) = cpuGpuRamData;
                 var (networkMetrics, collectionTimeMs) = networkData;
-                var (readBytes, writeBytes, readIops, writeIops) = diskData;
 
                 // Convert server-side NetworkMetric to shared NetworkMetric for serialization
                 var sharedNetworkMetrics = networkMetrics.Select(n => new NetworkMetric
@@ -80,16 +79,7 @@ public sealed class MultiplexService : IDisposable
                         UsedBytes = ram.UsedBytes,
                         TotalBytes = ram.TotalBytes
                     },
-                    DiskMetrics = new[]
-                    {
-                        new DiskMetric
-                        {
-                            ReadBytes = readBytes,
-                            WriteBytes = writeBytes,
-                            ReadIops = readIops,
-                            WriteIops = writeIops
-                        }
-                    },
+                    DiskMetrics = diskMetrics,
                     NetworkMetrics = sharedNetworkMetrics,
                     CollectionDurationMs = collectionTimeMs
                 };
@@ -135,9 +125,9 @@ public sealed class MultiplexService : IDisposable
     /// Post Disk metrics to the pipeline.
     /// Returns false if the buffer is full (backpressure).
     /// </summary>
-    public bool PostDiskMetrics(ulong readBytes, ulong writeBytes, uint readIops, uint writeIops)
+    public bool PostDiskMetrics(DiskMetric[] diskMetrics)
     {
-        return _diskBuffer.Post((readBytes, writeBytes, readIops, writeIops));
+        return _diskBuffer.Post(diskMetrics);
     }
 
     /// <summary>

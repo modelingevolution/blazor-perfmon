@@ -112,7 +112,7 @@ public sealed class PerformanceMonitorEngine : IDisposable
                         // Post to pipeline with timestamp captured before collection
                         var postSuccess = _multiplexService.PostCpuGpuRamMetrics(cpuTask.Result, gpuTask.Result, ramTask.Result, timestampMs)
                                         & _multiplexService.PostNetworkMetrics(networkTask.Result, collectionTimeMs)
-                                        & _multiplexService.PostDiskMetrics(diskTask.Result.ReadBytes, diskTask.Result.WriteBytes, diskTask.Result.ReadIops, diskTask.Result.WriteIops);
+                                        & _multiplexService.PostDiskMetrics(diskTask.Result);
 
                         if (!postSuccess)
                             _logger.LogWarning("Backpressure detected: some metrics not posted");

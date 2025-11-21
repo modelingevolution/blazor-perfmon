@@ -33,7 +33,9 @@
       "Bash(sudo mkdir:*)",
       "Bash(git check-ignore:*)",
       "Bash(git rm:*)",
-      "WebFetch(domain:www.nuget.org)"
+      "WebFetch(domain:www.nuget.org)",
+      "Bash(tee:*)",
+      "Bash(xargs:*)"
     ],
     "deny": [],
     "ask": []
