@@ -51,9 +51,7 @@ else
 
 app.UseHttpsRedirection();
 
-// Configure Blazor WebAssembly hosting
-app.UseBlazorFrameworkFiles();
-app.UseStaticFiles();
+// Configure middleware
 app.UseRouting();
 app.UseAntiforgery();
 
