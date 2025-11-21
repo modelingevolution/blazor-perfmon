@@ -241,9 +241,9 @@ public sealed class TimeSeriesChart : ChartBase
                 // Timestamp-based rendering: right edge = current time (not latest data!)
                 uint currentTimestamp = (uint)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
-                // Start fill path from bottom-left corner of first visible point
                 bool firstPoint = true;
-                float firstX = 0;
+                float prevX = 0, prevY = 0;
+                bool prevValid = false;
 
                 for (int i = 0; i < dataLength; i++)
                 {
@@ -263,18 +263,57 @@ public sealed class TimeSeriesChart : ChartBase
                     // Position: right edge - (time delta / time window) * width
                     float timeRatio = (float)timeDelta / _timeWindowMs;
                     float x = bounds.Right - (timeRatio * bounds.Width);
-
-                    // Clamp to visible area
-                    if (x < bounds.Left - 10) continue; // Skip points far off left edge
-
                     float y = bounds.Bottom - (bounds.Height * normalizedValue);
 
+                    // Handle left-edge clipping with interpolation
+                    if (x < bounds.Left)
+                    {
+                        // Point is past the left edge
+                        if (prevValid && prevX >= bounds.Left)
+                        {
+                            // Previous point was visible, interpolate at left boundary
+                            float t = (bounds.Left - prevX) / (x - prevX);
+                            float interpY = prevY + t * (y - prevY);
+
+                            if (firstPoint)
+                            {
+                                fillPath.MoveTo(bounds.Left, bounds.Bottom);
+                                fillPath.LineTo(bounds.Left, interpY);
+                                path.MoveTo(bounds.Left, interpY);
+                                firstPoint = false;
+                            }
+                            else
+                            {
+                                path.LineTo(bounds.Left, interpY);
+                                fillPath.LineTo(bounds.Left, interpY);
+                            }
+                        }
+                        // Update previous and continue (don't render this point)
+                        prevX = x;
+                        prevY = y;
+                        prevValid = true;
+                        continue;
+                    }
+
+                    // Point is visible
                     if (firstPoint)
                     {
-                        firstX = x;
-                        fillPath.MoveTo(x, bounds.Bottom);
-                        fillPath.LineTo(x, y);
-                        path.MoveTo(x, y);
+                        // Check if we need to interpolate at left edge first
+                        if (prevValid && prevX < bounds.Left)
+                        {
+                            // Interpolate entry point at left boundary
+                            float t = (bounds.Left - prevX) / (x - prevX);
+                            float interpY = prevY + t * (y - prevY);
+                            fillPath.MoveTo(bounds.Left, bounds.Bottom);
+                            fillPath.LineTo(bounds.Left, interpY);
+                            path.MoveTo(bounds.Left, interpY);
+                        }
+                        else
+                        {
+                            fillPath.MoveTo(x, bounds.Bottom);
+                            fillPath.LineTo(x, y);
+                            path.MoveTo(x, y);
+                        }
                         firstPoint = false;
                     }
                     else
@@ -282,6 +321,10 @@ public sealed class TimeSeriesChart : ChartBase
                         path.LineTo(x, y);
                         fillPath.LineTo(x, y);
                     }
+
+                    prevX = x;
+                    prevY = y;
+                    prevValid = true;
                 }
 
                 if (!firstPoint)
