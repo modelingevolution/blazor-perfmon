@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
-using Frontend.Services;
-using Frontend.Models;
+using ModelingEvolution.BlazorPerfMon.Client.Services;
+using ModelingEvolution.BlazorPerfMon.Client.Models;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 
@@ -15,6 +15,6 @@ builder.Services.AddSingleton<MetricsStore>(sp => new MetricsStore(intervals: 12
 string wsUrl = builder.HostEnvironment.BaseAddress.Replace("http://", "ws://").Replace("https://", "wss://") + "ws";
 builder.Services.AddSingleton(sp => new WebSocketClient(wsUrl));
 
-Console.WriteLine($"Frontend initialized. WebSocket URL: {wsUrl}");
+Console.WriteLine($"ModelingEvolution.BlazorPerfMon.Client initialized. WebSocket URL: {wsUrl}");
 
 await builder.Build().RunAsync();

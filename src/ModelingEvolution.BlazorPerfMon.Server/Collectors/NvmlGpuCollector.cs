@@ -1,8 +1,8 @@
 using ManagedCuda.Nvml;
-using Backend.Core;
 using Microsoft.Extensions.Options;
+using ModelingEvolution.BlazorPerfMon.Server.Core;
 
-namespace Backend.Collectors;
+namespace ModelingEvolution.BlazorPerfMon.Server.Collectors;
 
 /// <summary>
 /// GPU collector for desktop NVIDIA GPUs using NVML library.

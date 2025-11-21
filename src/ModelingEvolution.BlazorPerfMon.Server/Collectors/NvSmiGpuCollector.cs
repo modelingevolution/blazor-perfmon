@@ -1,6 +1,6 @@
 using System.Diagnostics;
 
-namespace Backend.Collectors;
+namespace ModelingEvolution.BlazorPerfMon.Server.Collectors;
 
 /// <summary>
 /// GPU collector for desktop NVIDIA GPUs using nvidia-smi.

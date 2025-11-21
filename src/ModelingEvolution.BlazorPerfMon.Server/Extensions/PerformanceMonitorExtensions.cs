@@ -1,13 +1,13 @@
-using Backend.Collectors;
-using Backend.Core;
-using Backend.Services;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using ModelingEvolution.BlazorPerfMon.Server.Collectors;
+using ModelingEvolution.BlazorPerfMon.Server.Core;
+using ModelingEvolution.BlazorPerfMon.Server.Services;
 
-namespace Backend.Extensions;
+namespace ModelingEvolution.BlazorPerfMon.Server.Extensions;
 
 /// <summary>
 /// Extension methods for registering and configuring the Performance Monitor.

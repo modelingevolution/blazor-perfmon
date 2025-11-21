@@ -1,6 +1,6 @@
-using Backend.Core;
+using ModelingEvolution.BlazorPerfMon.Server.Core;
 
-namespace Backend.Collectors;
+namespace ModelingEvolution.BlazorPerfMon.Server.Collectors;
 
 /// <summary>
 /// Collects CPU load percentage for each core by reading /proc/stat.

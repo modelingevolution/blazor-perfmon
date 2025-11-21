@@ -2,7 +2,7 @@ using System.Net.WebSockets;
 using MessagePack;
 using ModelingEvolution.BlazorPerfMon.Shared;
 
-namespace Frontend.Services;
+namespace ModelingEvolution.BlazorPerfMon.Client.Services;
 
 /// <summary>
 /// WebSocket client with automatic reconnection.

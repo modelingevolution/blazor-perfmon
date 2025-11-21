@@ -1,7 +1,7 @@
 using System.Collections;
 using System.Collections.Immutable;
 
-namespace Frontend.Collections;
+namespace ModelingEvolution.BlazorPerfMon.Client.Collections;
 
 /// <summary>
 /// Immutable circular buffer backed by ImmutableQueue.

@@ -1,4 +1,5 @@
-using Backend.Extensions;
+using ModelingEvolution.BlazorPerfMon.Client.Services;
+using ModelingEvolution.BlazorPerfMon.Server.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -37,11 +38,11 @@ app.MapRazorComponents<ModelingEvolution.BlazorPerfMon.Example.Components.App>()
     .AddInteractiveWebAssemblyRenderMode()
     .AddAdditionalAssemblies(
         typeof(ModelingEvolution.BlazorPerfMon.Example.Client._Imports).Assembly,
-        typeof(Frontend.Services.WebSocketClient).Assembly);
+        typeof(WebSocketClient).Assembly);
 
 var logger = app.Services.GetRequiredService<ILogger<Program>>();
 logger.LogInformation("Blazor PerfMon Example started");
 logger.LogInformation("WebSocket endpoint: ws://localhost:5000/ws");
-logger.LogInformation("Frontend: http://localhost:5000");
+logger.LogInformation("ModelingEvolution.BlazorPerfMon.Client: http://localhost:5000");
 
 app.Run();

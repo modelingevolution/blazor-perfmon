@@ -1,7 +1,7 @@
-namespace Frontend.Models;
+namespace ModelingEvolution.BlazorPerfMon.Client.Models;
 
 /// <summary>
-/// Configuration settings for the monitoring system (frontend).
+/// Configuration settings for the monitoring system (ModelingEvolution.BlazorPerfMon.Client).
 /// </summary>
 public sealed class MonitorSettings
 {

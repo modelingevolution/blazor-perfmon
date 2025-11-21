@@ -1,9 +1,9 @@
-using Backend.Collectors;
-using Backend.Core;
 using Microsoft.Extensions.Options;
+using ModelingEvolution.BlazorPerfMon.Server.Collectors;
+using ModelingEvolution.BlazorPerfMon.Server.Core;
 using ModelingEvolution.BlazorPerfMon.Shared;
 
-namespace Backend.Services;
+namespace ModelingEvolution.BlazorPerfMon.Server.Services;
 
 /// <summary>
 /// Builds the PerformanceConfigurationSnapshot that describes the metrics layout.

@@ -1,7 +1,7 @@
-using Frontend.Collections;
+using ModelingEvolution.BlazorPerfMon.Client.Collections;
 using ModelingEvolution.BlazorPerfMon.Shared;
 
-namespace Frontend.Services;
+namespace ModelingEvolution.BlazorPerfMon.Client.Services;
 
 /// <summary>
 /// Thread-safe metrics store using immutable circular buffer.

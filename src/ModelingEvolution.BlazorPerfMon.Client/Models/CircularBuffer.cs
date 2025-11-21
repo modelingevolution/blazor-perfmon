@@ -1,4 +1,4 @@
-namespace Frontend.Models;
+namespace ModelingEvolution.BlazorPerfMon.Client.Models;
 
 /// <summary>
 /// Efficient circular buffer for rolling window data storage.

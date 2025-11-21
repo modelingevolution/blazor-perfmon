@@ -1,6 +1,6 @@
 using SkiaSharp;
 
-namespace Frontend.Rendering;
+namespace ModelingEvolution.BlazorPerfMon.Client.Rendering;
 
 /// <summary>
 /// Represents a single time series for rendering in a chart.

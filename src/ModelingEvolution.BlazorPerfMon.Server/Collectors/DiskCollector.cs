@@ -1,7 +1,7 @@
-using Backend.Core;
 using Microsoft.Extensions.Options;
+using ModelingEvolution.BlazorPerfMon.Server.Core;
 
-namespace Backend.Collectors;
+namespace ModelingEvolution.BlazorPerfMon.Server.Collectors;
 
 /// <summary>
 /// Collects disk I/O statistics from /proc/diskstats.

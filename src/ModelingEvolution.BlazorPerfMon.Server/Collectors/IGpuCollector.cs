@@ -1,4 +1,4 @@
-namespace Backend.Collectors;
+namespace ModelingEvolution.BlazorPerfMon.Server.Collectors;
 
 /// <summary>
 /// Interface for GPU metrics collection.

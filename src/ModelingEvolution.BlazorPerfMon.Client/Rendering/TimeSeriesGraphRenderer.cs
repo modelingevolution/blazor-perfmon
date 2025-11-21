@@ -1,6 +1,6 @@
 using SkiaSharp;
 
-namespace Frontend.Rendering;
+namespace ModelingEvolution.BlazorPerfMon.Client.Rendering;
 
 /// <summary>
 /// Renders time-series line graph for total average CPU load.

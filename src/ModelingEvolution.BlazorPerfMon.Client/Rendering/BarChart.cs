@@ -1,6 +1,6 @@
 using SkiaSharp;
 
-namespace Frontend.Rendering;
+namespace ModelingEvolution.BlazorPerfMon.Client.Rendering;
 
 /// <summary>
 /// Renders horizontal bar chart.

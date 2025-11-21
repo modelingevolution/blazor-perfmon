@@ -1,7 +1,7 @@
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 
-namespace Backend.Collectors;
+namespace ModelingEvolution.BlazorPerfMon.Server.Collectors;
 
 /// <summary>
 /// GPU collector for NVIDIA Jetson platforms using tegrastats.

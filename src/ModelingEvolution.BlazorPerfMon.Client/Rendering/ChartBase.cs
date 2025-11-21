@@ -1,6 +1,6 @@
 using SkiaSharp;
 
-namespace Frontend.Rendering;
+namespace ModelingEvolution.BlazorPerfMon.Client.Rendering;
 
 /// <summary>
 /// Abstract base class for all chart renderers.

@@ -1,4 +1,4 @@
-namespace Frontend.Rendering;
+namespace ModelingEvolution.BlazorPerfMon.Client.Rendering;
 
 /// <summary>
 /// Wraps enumerable data with count for chart rendering.

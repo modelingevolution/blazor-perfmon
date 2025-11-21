@@ -4,7 +4,7 @@ using System.Threading.Tasks.Dataflow;
 using MessagePack;
 using Microsoft.Extensions.Logging;
 
-namespace Backend.Services;
+namespace ModelingEvolution.BlazorPerfMon.Server.Services;
 
 /// <summary>
 /// Handles WebSocket connections and integrates with MultiplexService.

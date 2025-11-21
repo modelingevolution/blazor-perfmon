@@ -1,4 +1,4 @@
-namespace Backend.Core;
+namespace ModelingEvolution.BlazorPerfMon.Server.Core;
 
 /// <summary>
 /// Interface for metrics collectors.

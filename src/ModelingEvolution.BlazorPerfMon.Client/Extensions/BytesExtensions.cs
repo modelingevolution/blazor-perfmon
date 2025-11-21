@@ -1,6 +1,6 @@
 using ModelingEvolution;
 
-namespace Frontend.Extensions;
+namespace ModelingEvolution.BlazorPerfMon.Client.Extensions;
 
 /// <summary>
 /// Extension methods for Bytes type formatting.

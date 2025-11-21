@@ -1,7 +1,7 @@
 using MessagePack;
 using ModelingEvolution.BlazorPerfMon.Shared;
 
-namespace Backend.Core;
+namespace ModelingEvolution.BlazorPerfMon.Server.Core;
 
 /// <summary>
 /// MessagePack-serializable snapshot of all system metrics.

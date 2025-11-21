@@ -1,10 +1,10 @@
 using System.Diagnostics;
-using Backend.Collectors;
-using Backend.Core;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
+using ModelingEvolution.BlazorPerfMon.Server.Collectors;
+using ModelingEvolution.BlazorPerfMon.Server.Core;
 
-namespace Backend.Services;
+namespace ModelingEvolution.BlazorPerfMon.Server.Services;
 
 /// <summary>
 /// Manages the metrics collection loop using PeriodicTimer.

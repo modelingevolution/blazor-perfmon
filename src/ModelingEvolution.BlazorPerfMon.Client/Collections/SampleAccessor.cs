@@ -1,7 +1,7 @@
 using System.Collections;
 using ModelingEvolution.BlazorPerfMon.Shared;
 
-namespace Frontend.Collections;
+namespace ModelingEvolution.BlazorPerfMon.Client.Collections;
 
 /// <summary>
 /// Zero-copy adapter/facade over ImmutableCircularBuffer with projection selector.

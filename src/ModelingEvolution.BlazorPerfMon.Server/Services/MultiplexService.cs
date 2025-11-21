@@ -1,9 +1,7 @@
 using System.Threading.Tasks.Dataflow;
-using Backend.Core;
-using Backend.Collectors;
 using MessagePack;
 
-namespace Backend.Services;
+namespace ModelingEvolution.BlazorPerfMon.Server.Services;
 
 /// <summary>
 /// TPL Dataflow pipeline for metrics multiplexing.

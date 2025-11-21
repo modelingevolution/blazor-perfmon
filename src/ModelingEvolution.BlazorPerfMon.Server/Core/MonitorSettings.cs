@@ -1,4 +1,4 @@
-namespace Backend.Core;
+namespace ModelingEvolution.BlazorPerfMon.Server.Core;
 
 /// <summary>
 /// Configuration settings for the monitoring system.
