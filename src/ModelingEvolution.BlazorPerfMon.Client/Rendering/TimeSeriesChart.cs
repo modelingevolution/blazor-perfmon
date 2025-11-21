@@ -238,8 +238,8 @@ public sealed class TimeSeriesChart : ChartBase
             // Calculate X positions based on timestamps or evenly-spaced fallback
             if (useTimestamps && _timestamps.Length > 0)
             {
-                // Timestamp-based rendering: right edge = latest timestamp
-                uint latestTimestamp = _timestamps[_timestamps.Length - 1];
+                // Timestamp-based rendering: right edge = current time (not latest data!)
+                uint currentTimestamp = (uint)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
                 // Start fill path from bottom-left corner of first visible point
                 bool firstPoint = true;
@@ -256,9 +256,9 @@ public sealed class TimeSeriesChart : ChartBase
                     float normalizedValue = (value - _minValue) / valueRange;
                     normalizedValue = Math.Clamp(normalizedValue, 0f, 1f);
 
-                    // Calculate X position based on timestamp delta from latest
+                    // Calculate X position based on timestamp delta from CURRENT time
                     uint timestamp = _timestamps[timestampIndex];
-                    long timeDelta = (long)latestTimestamp - (long)timestamp;
+                    long timeDelta = (long)currentTimestamp - (long)timestamp;
 
                     // Position: right edge - (time delta / time window) * width
                     float timeRatio = (float)timeDelta / _timeWindowMs;
@@ -286,8 +286,13 @@ public sealed class TimeSeriesChart : ChartBase
 
                 if (!firstPoint)
                 {
-                    // Complete fill path back to bottom
-                    fillPath.LineTo(bounds.Right - ((float)((long)latestTimestamp - (long)_timestamps[_timestamps.Length - 1]) / _timeWindowMs * bounds.Width), bounds.Bottom);
+                    // Complete fill path back to bottom-right
+                    // Calculate where the last point should be relative to current time
+                    uint lastDataTimestamp = _timestamps[_timestamps.Length - 1];
+                    long lastTimeDelta = (long)currentTimestamp - (long)lastDataTimestamp;
+                    float lastTimeRatio = (float)lastTimeDelta / _timeWindowMs;
+                    float lastX = bounds.Right - (lastTimeRatio * bounds.Width);
+                    fillPath.LineTo(lastX, bounds.Bottom);
                     fillPath.Close();
                 }
             }
