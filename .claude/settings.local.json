@@ -1,0 +1,41 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(dotnet new:*)",
+      "Bash(mkdir:*)",
+      "Bash(dotnet:*)",
+      "WebSearch",
+      "Bash(pip3 install:*)",
+      "Bash(curl:*)",
+      "Bash(lsof:*)",
+      "Bash(xargs kill:*)",
+      "Bash(cat:*)",
+      "Bash(nvidia-smi:*)",
+      "Bash(echo:*)",
+      "WebFetch(domain:github.com)",
+      "Bash(killall:*)",
+      "Bash(timeout 10 dotnet run:*)",
+      "Bash(dotnet-script:*)",
+      "Bash(pkill:*)",
+      "Bash(kill:*)",
+      "Bash(chmod:*)",
+      "Bash(python3:*)",
+      "Bash(timeout 30 dotnet run:*)",
+      "Bash(__NEW_LINE__ ingEvolution.BlazorPerfMon.Shared/Class1.cs src/ModelingEvolution.BlazorPerfMon.Server/Class1.cs)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(find:*)",
+      "Bash(journalctl:*)",
+      "Bash(ps:*)",
+      "Bash(pwsh:*)",
+      "Bash(wsl:*)",
+      "Bash(sudo ln:*)",
+      "Bash(sudo mkdir:*)",
+      "Bash(git check-ignore:*)",
+      "Bash(git rm:*)",
+      "WebFetch(domain:www.nuget.org)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

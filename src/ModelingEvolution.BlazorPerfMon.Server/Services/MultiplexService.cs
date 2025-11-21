@@ -8,6 +8,7 @@ namespace Backend.Services;
 /// <summary>
 /// TPL Dataflow pipeline for metrics multiplexing.
 /// Stage 4: Uses 3-way JoinBlock to combine (CPU+GPU+RAM), Network (with collection time), and Disk data.
+/// Tracks connected clients and fires events when first client connects or last client disconnects.
 /// </summary>
 public sealed class MultiplexService : IDisposable
 {
@@ -17,6 +18,18 @@ public sealed class MultiplexService : IDisposable
     private readonly JoinBlock<(float[], float[], RamMetrics, uint), (NetworkMetric[], uint), (ulong ReadBytes, ulong WriteBytes, uint ReadIops, uint WriteIops)> _joinBlock;
     private readonly TransformBlock<Tuple<(float[], float[], RamMetrics, uint), (NetworkMetric[], uint), (ulong, ulong, uint, uint)>, byte[]> _serializeBlock;
     private readonly BroadcastBlock<byte[]> _broadcastBlock;
+
+    private int _clientCount = 0;
+
+    /// <summary>
+    /// Fired when the first client connects (transition from 0 to 1 clients).
+    /// </summary>
+    public event Action? FirstClientConnected;
+
+    /// <summary>
+    /// Fired when the last client disconnects (transition from 1 to 0 clients).
+    /// </summary>
+    public event Action? LastClientDisconnected;
 
     public MultiplexService()
     {
@@ -132,6 +145,7 @@ public sealed class MultiplexService : IDisposable
     /// <summary>
     /// Create a target block that receives broadcasted metrics.
     /// Each WebSocket client should create its own target block.
+    /// Fires FirstClientConnected event when transitioning from 0 to 1 clients.
     /// </summary>
     public ITargetBlock<byte[]> CreateClientTarget(Func<byte[], Task> sendAction)
     {
@@ -146,18 +160,33 @@ public sealed class MultiplexService : IDisposable
         // Link broadcast to this client's action block
         _broadcastBlock.LinkTo(actionBlock, new DataflowLinkOptions { PropagateCompletion = false });
 
+        // Track client count using Interlocked
+        var newCount = Interlocked.Increment(ref _clientCount);
+        if (newCount == 1)
+        {
+            FirstClientConnected?.Invoke();
+        }
+
         return actionBlock;
     }
 
     /// <summary>
     /// Unlink a client target from the broadcast block.
     /// Call this when a WebSocket client disconnects.
+    /// Fires LastClientDisconnected event when transitioning from 1 to 0 clients.
     /// </summary>
     public void UnlinkClientTarget(ITargetBlock<byte[]> target)
     {
         // Unlinking is automatic when the target completes
         // Just complete the target block
         target.Complete();
+
+        // Track client count using Interlocked
+        var newCount = Interlocked.Decrement(ref _clientCount);
+        if (newCount == 0)
+        {
+            LastClientDisconnected?.Invoke();
+        }
     }
 
     public void Dispose()

@@ -96,3 +96,6 @@ env/
 *.temp
 *.swp
 *~
+
+# Publish artifacts
+publish-aot/

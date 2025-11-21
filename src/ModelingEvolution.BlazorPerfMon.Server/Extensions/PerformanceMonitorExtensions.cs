@@ -1,0 +1,106 @@
+using Backend.Collectors;
+using Backend.Core;
+using Backend.Services;
+using Microsoft.AspNetCore.Builder;
+using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
+
+namespace Backend.Extensions;
+
+/// <summary>
+/// Extension methods for registering and configuring the Performance Monitor.
+/// </summary>
+public static class PerformanceMonitorExtensions
+{
+    /// <summary>
+    /// Registers all Performance Monitor services (collectors, multiplex service, WebSocket service, engine).
+    /// GPU collector type is determined by MonitorSettings.GpuCollectorType ("nvml", "nvsmi", or "nvtegra").
+    /// </summary>
+    public static IServiceCollection AddPerformanceMonitor(this IServiceCollection services, IConfiguration configuration)
+    {
+        // Configure settings
+        services.Configure<MonitorSettings>(
+            configuration.GetSection("MonitorSettings"));
+
+        // Register collectors as singletons
+        services.AddSingleton<CpuCollector>();
+        services.AddSingleton<RamCollector>();
+        services.AddSingleton<NetworkCollector>();
+        services.AddSingleton<DiskCollector>();
+
+        // Register GPU collector based on configuration
+        services.AddSingleton<IGpuCollector>(sp =>
+        {
+            var settingsOptions = sp.GetRequiredService<IOptions<MonitorSettings>>();
+            var settings = settingsOptions.Value;
+            var logger = sp.GetRequiredService<ILoggerFactory>();
+
+            return settings.GpuCollectorType.ToLowerInvariant() switch
+            {
+                "nvtegra" => new NvTegraGpuCollector(logger.CreateLogger<NvTegraGpuCollector>()),
+                "nvsmi" => new NvSmiGpuCollector(logger.CreateLogger<NvSmiGpuCollector>()),
+                "nvml" => new NvmlGpuCollector(logger.CreateLogger<NvmlGpuCollector>(), settingsOptions),
+                _ => new NvmlGpuCollector(logger.CreateLogger<NvmlGpuCollector>(), settingsOptions)
+            };
+        });
+
+        // Register services
+        services.AddSingleton<MultiplexService>();
+        services.AddSingleton<MetricsConfigurationBuilder>();
+        services.AddSingleton<WebSocketService>();
+        services.AddSingleton<PerformanceMonitorEngine>();
+
+        return services;
+    }
+
+    /// <summary>
+    /// Maps the Performance Monitor WebSocket endpoint at /ws.
+    /// Configures WebSockets middleware and wires up the engine to start/stop based on client connections.
+    /// The metrics collection engine only runs when there is at least one connected WebSocket client.
+    /// </summary>
+    public static IApplicationBuilder MapPerformanceMonitorEndpoint(this IApplicationBuilder app)
+    {
+        // Enable WebSockets
+        app.UseWebSockets(new WebSocketOptions
+        {
+            KeepAliveInterval = TimeSpan.FromSeconds(30)
+        });
+
+        // Get services
+        var multiplexService = app.ApplicationServices.GetRequiredService<MultiplexService>();
+        var engine = app.ApplicationServices.GetRequiredService<PerformanceMonitorEngine>();
+
+        // Wire up engine to start/stop based on client connections
+        multiplexService.FirstClientConnected += () =>
+        {
+            engine.Start();
+        };
+
+        multiplexService.LastClientDisconnected += () =>
+        {
+            engine.Stop();
+        };
+
+        // WebSocket endpoint for metrics streaming
+        app.Map("/ws", wsApp =>
+        {
+            wsApp.Run(async context =>
+            {
+                if (context.WebSockets.IsWebSocketRequest)
+                {
+                    var webSocket = await context.WebSockets.AcceptWebSocketAsync();
+                    var wsService = context.RequestServices.GetRequiredService<WebSocketService>();
+                    await wsService.HandleWebSocketAsync(webSocket, context.RequestAborted);
+                }
+                else
+                {
+                    context.Response.StatusCode = 400;
+                }
+            });
+        });
+
+        return app;
+    }
+}

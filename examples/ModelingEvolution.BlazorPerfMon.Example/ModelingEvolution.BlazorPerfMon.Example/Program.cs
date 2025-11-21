@@ -1,38 +1,9 @@
-using Backend.Collectors;
-using Backend.Core;
-using Backend.Services;
-using Microsoft.Extensions.Options;
+using Backend.Extensions;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Configure settings
-builder.Services.Configure<MonitorSettings>(
-    builder.Configuration.GetSection("MonitorSettings"));
-
-// Register Backend services as singletons
-builder.Services.AddSingleton<CpuCollector>();
-builder.Services.AddSingleton<RamCollector>();
-builder.Services.AddSingleton<NetworkCollector>();
-builder.Services.AddSingleton<DiskCollector>();
-builder.Services.AddSingleton<MultiplexService>();
-builder.Services.AddSingleton<MetricsConfigurationBuilder>();
-builder.Services.AddSingleton<WebSocketService>();
-
-// Register GPU collector based on configuration
-builder.Services.AddSingleton<IGpuCollector>(sp =>
-{
-    var settingsOptions = sp.GetRequiredService<IOptions<MonitorSettings>>();
-    var settings = settingsOptions.Value;
-    var logger = sp.GetRequiredService<ILoggerFactory>();
-
-    return settings.GpuCollectorType.ToLowerInvariant() switch
-    {
-        "nvtegra" => new NvTegraGpuCollector(logger.CreateLogger<NvTegraGpuCollector>()),
-        "nvsmi" => new NvSmiGpuCollector(logger.CreateLogger<NvSmiGpuCollector>()),
-        "nvml" => new NvmlGpuCollector(logger.CreateLogger<NvmlGpuCollector>(), settingsOptions),
-        _ => new NvmlGpuCollector(logger.CreateLogger<NvmlGpuCollector>(), settingsOptions)
-    };
-});
+// Register Performance Monitor services
+builder.Services.AddPerformanceMonitor(builder.Configuration);
 
 // Add Blazor services
 builder.Services.AddRazorComponents()
@@ -57,26 +28,8 @@ app.UseHttpsRedirection();
 app.UseRouting();
 app.UseAntiforgery();
 
-// Enable WebSockets
-app.UseWebSockets(new WebSocketOptions
-{
-    KeepAliveInterval = TimeSpan.FromSeconds(30)
-});
-
-// WebSocket endpoint for metrics streaming
-app.Map("/ws", async context =>
-{
-    if (context.WebSockets.IsWebSocketRequest)
-    {
-        var webSocket = await context.WebSockets.AcceptWebSocketAsync();
-        var wsService = context.RequestServices.GetRequiredService<WebSocketService>();
-        await wsService.HandleWebSocketAsync(webSocket, context.RequestAborted);
-    }
-    else
-    {
-        context.Response.StatusCode = 400;
-    }
-});
+// Map Performance Monitor WebSocket endpoint
+app.MapPerformanceMonitorEndpoint();
 
 // Map Razor components
 app.MapStaticAssets();
@@ -86,85 +39,7 @@ app.MapRazorComponents<ModelingEvolution.BlazorPerfMon.Example.Components.App>()
         typeof(ModelingEvolution.BlazorPerfMon.Example.Client._Imports).Assembly,
         typeof(Frontend.Services.WebSocketClient).Assembly);
 
-// Start metrics collection using PeriodicTimer
-var cpuCollector = app.Services.GetRequiredService<CpuCollector>();
-var ramCollector = app.Services.GetRequiredService<RamCollector>();
-var networkCollector = app.Services.GetRequiredService<NetworkCollector>();
-var diskCollector = app.Services.GetRequiredService<DiskCollector>();
-var gpuCollector = app.Services.GetRequiredService<IGpuCollector>();
-var multiplexService = app.Services.GetRequiredService<MultiplexService>();
-var settings = app.Services.GetRequiredService<IOptions<MonitorSettings>>().Value;
 var logger = app.Services.GetRequiredService<ILogger<Program>>();
-
-var metricsTimer = new PeriodicTimer(TimeSpan.FromMilliseconds(settings.CollectionIntervalMs));
-var cancellationTokenSource = new CancellationTokenSource();
-
-// Background task for metrics collection
-var stopwatch = new System.Diagnostics.Stopwatch();
-_ = Task.Run(async () =>
-{
-    while (await metricsTimer.WaitForNextTickAsync(cancellationTokenSource.Token))
-    {
-        try
-        {
-            // Capture timestamp BEFORE metrics collection starts
-            var timestampMs = (uint)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-
-            stopwatch.Restart();
-
-            // Collect metrics in parallel with individual timing
-            var cpuSw = System.Diagnostics.Stopwatch.StartNew();
-            var cpuTask = Task.Run(() => { var result = cpuCollector.Collect(); cpuSw.Stop(); return result; }, cancellationTokenSource.Token);
-
-            var ramSw = System.Diagnostics.Stopwatch.StartNew();
-            var ramTask = Task.Run(() => { var result = ramCollector.Collect(); ramSw.Stop(); return result; }, cancellationTokenSource.Token);
-
-            var gpuSw = System.Diagnostics.Stopwatch.StartNew();
-            var gpuTask = Task.Run(() => { var result = gpuCollector.Collect(); gpuSw.Stop(); return result; }, cancellationTokenSource.Token);
-
-            var networkSw = System.Diagnostics.Stopwatch.StartNew();
-            var networkTask = Task.Run(() => { var result = networkCollector.Collect(); networkSw.Stop(); return result; }, cancellationTokenSource.Token);
-
-            var diskSw = System.Diagnostics.Stopwatch.StartNew();
-            var diskTask = Task.Run(() => { var result = diskCollector.Collect(); diskSw.Stop(); return result; }, cancellationTokenSource.Token);
-
-            await Task.WhenAll(cpuTask, ramTask, gpuTask, networkTask, diskTask);
-
-            stopwatch.Stop();
-            var collectionTimeMs = (uint)stopwatch.ElapsedMilliseconds;
-
-            // Log individual collector timings when total exceeds interval
-            if (collectionTimeMs > settings.CollectionIntervalMs)
-            {
-                logger.LogWarning("Collection time {CollectionTimeMs}ms exceeds interval {IntervalMs}ms. CPU: {CpuMs}ms, RAM: {RamMs}ms, GPU: {GpuMs}ms, Network: {NetworkMs}ms, Disk: {DiskMs}ms",
-                    collectionTimeMs, settings.CollectionIntervalMs,
-                    cpuSw.ElapsedMilliseconds, ramSw.ElapsedMilliseconds, gpuSw.ElapsedMilliseconds,
-                    networkSw.ElapsedMilliseconds, diskSw.ElapsedMilliseconds);
-            }
-
-            // Post to pipeline with timestamp captured before collection
-            var postSuccess = multiplexService.PostCpuGpuRamMetrics(cpuTask.Result, gpuTask.Result, ramTask.Result, timestampMs)
-                            & multiplexService.PostNetworkMetrics(networkTask.Result, collectionTimeMs)
-                            & multiplexService.PostDiskMetrics(diskTask.Result.ReadBytes, diskTask.Result.WriteBytes, diskTask.Result.ReadIops, diskTask.Result.WriteIops);
-
-            if (!postSuccess)
-                logger.LogWarning("Backpressure detected: some metrics not posted");
-        }
-        catch (Exception ex)
-        {
-            logger.LogError(ex, "Error in metrics collection");
-        }
-    }
-}, cancellationTokenSource.Token);
-
-// Cleanup on shutdown
-app.Lifetime.ApplicationStopping.Register(() =>
-{
-    cancellationTokenSource.Cancel();
-    metricsTimer.Dispose();
-    cancellationTokenSource.Dispose();
-});
-
 logger.LogInformation("Blazor PerfMon Example started");
 logger.LogInformation("WebSocket endpoint: ws://localhost:5000/ws");
 logger.LogInformation("Frontend: http://localhost:5000");

@@ -8,7 +8,7 @@ namespace Frontend.Rendering;
 public sealed class TimeSeriesChart : ChartBase
 {
     private readonly SKPaint _axisPaint;
-    private readonly List<(string Label, IEnumerable<float> Data, int Count, SKColor Color)> _dataSeries = new();
+    private TimeSeriesF[] _dataSeries = Array.Empty<TimeSeriesF>();
     private IEnumerable<uint> _timestamps = Enumerable.Empty<uint>();
     private int _timestampCount = 0;
 
@@ -32,55 +32,13 @@ public sealed class TimeSeriesChart : ChartBase
     }
 
     /// <summary>
-    /// Sets the data for the time series chart (single series).
-    /// </summary>
-    public void SetData(string title, IEnumerable<float> dataPoints, int count, int maxDataPoints, int collectionIntervalMs = 500)
-    {
-        _title = title;
-        _maxDataPoints = maxDataPoints;
-        _collectionIntervalMs = collectionIntervalMs;
-        _dataSeries.Clear();
-        _dataSeries.Add((title, dataPoints, count, new SKColor(100, 255, 100))); // Green
-        _useDynamicScale = false;
-        _minValue = 0f;
-        _maxValue = 100f;
-    }
-
-    /// <summary>
-    /// Sets the data for the time series chart with multiple series and dynamic scaling.
-    /// </summary>
-    public void SetMultiSeriesData(string title, (string Label, IEnumerable<float> Data, int Count, SKColor Color)[] series, int maxDataPoints, int collectionIntervalMs, bool useDynamicScale = false)
-    {
-        _title = title;
-        _maxDataPoints = maxDataPoints;
-        _collectionIntervalMs = collectionIntervalMs;
-        _timeWindowMs = maxDataPoints * collectionIntervalMs;
-        _dataSeries.Clear();
-        _dataSeries.AddRange(series);
-        _useDynamicScale = useDynamicScale;
-        _timestamps = Enumerable.Empty<uint>();
-        _timestampCount = 0;
-
-        if (_useDynamicScale)
-        {
-            CalculateDynamicScale();
-        }
-        else
-        {
-            _minValue = 0f;
-            _maxValue = 100f;
-        }
-    }
-
-    /// <summary>
-    /// Sets the data with timestamps for precise time-based rendering.
+    /// Sets up the chart with title, series data, and timestamps for precise time-based rendering.
     /// Accepts IEnumerable for zero-copy architecture.
     /// </summary>
-    public void SetMultiSeriesDataWithTimestamps(string title, (string Label, IEnumerable<float> Data, int Count, SKColor Color)[] series, IEnumerable<uint> timestamps, int timestampCount, int timeWindowMs, bool useDynamicScale = false)
+    public void Setup(string title, TimeSeriesF[] series, IEnumerable<uint> timestamps, int timestampCount, int timeWindowMs, bool useDynamicScale = false)
     {
         _title = title;
-        _dataSeries.Clear();
-        _dataSeries.AddRange(series);
+        _dataSeries = series;
         _timestamps = timestamps;
         _timestampCount = timestampCount;
         _timeWindowMs = timeWindowMs;
@@ -111,7 +69,7 @@ public sealed class TimeSeriesChart : ChartBase
 
     private void CalculateDynamicScale()
     {
-        if (_dataSeries.Count == 0)
+        if (_dataSeries.Length == 0)
         {
             _minValue = 0f;
             _maxValue = 100f;
@@ -140,7 +98,7 @@ public sealed class TimeSeriesChart : ChartBase
 
     protected override void RenderContent(SKCanvas canvas)
     {
-        if (_dataSeries.Count == 0 || _dataSeries[0].Count == 0)
+        if (_dataSeries.Length == 0 || _dataSeries[0].Count == 0)
             return;
 
         var bounds = Bounds;
@@ -208,8 +166,8 @@ public sealed class TimeSeriesChart : ChartBase
         float valueRange = _maxValue - _minValue;
         if (valueRange < 0.01f) valueRange = 1f;
 
-        // Use timestamp-based rendering if timestamps are available
-        bool useTimestamps = _timestampCount > 0;
+        // Timestamp-based rendering: right edge = current time (not latest data!)
+        uint currentTimestamp = (uint)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
 
         foreach (var series in _dataSeries)
         {
@@ -234,168 +192,157 @@ public sealed class TimeSeriesChart : ChartBase
             using var path = new SKPath();
             using var fillPath = new SKPath();
 
-            int dataLength = Math.Min(series.Count, useTimestamps ? _timestampCount : series.Count);
-            if (dataLength < 2) continue;
+            bool firstPoint = true;
+            float prevX = 0, prevY = 0;
+            bool prevValid = false;
 
-            // Calculate X positions based on timestamps or evenly-spaced fallback
-            if (useTimestamps && _timestampCount > 0)
+            // Calculate culling threshold: skip samples way outside the left edge
+            // Keep a small margin for smooth interpolation
+            float cullThreshold = bounds.Left - (bounds.Width * 0.05f);
+            float rightMargin = bounds.Right + (bounds.Width * 0.05f);
+
+            // Zip data with timestamps for correlated enumeration
+            foreach (var (value, timestamp) in series.Data.Zip(_timestamps))
             {
-                // Timestamp-based rendering: right edge = current time (not latest data!)
-                uint currentTimestamp = (uint)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+                float normalizedValue = (value - _minValue) / valueRange;
+                normalizedValue = Math.Clamp(normalizedValue, 0f, 1f);
 
-                bool firstPoint = true;
-                float prevX = 0, prevY = 0;
-                bool prevValid = false;
+                // Calculate X position based on timestamp delta from CURRENT time
+                long timeDelta = (long)currentTimestamp - (long)timestamp;
 
-                // Zip data with timestamps for correlated enumeration
-                foreach (var (value, timestamp) in series.Data.Zip(_timestamps))
+                // Position: right edge - (time delta / time window) * width
+                float timeRatio = (float)timeDelta / _timeWindowMs;
+                float x = bounds.Right - (timeRatio * bounds.Width);
+                float y = bounds.Bottom - (bounds.Height * normalizedValue);
+
+                // Skip samples that are way too far left (optimization + numerical stability)
+                if (x < cullThreshold)
                 {
-                    float normalizedValue = (value - _minValue) / valueRange;
-                    normalizedValue = Math.Clamp(normalizedValue, 0f, 1f);
-
-                    // Calculate X position based on timestamp delta from CURRENT time
-                    long timeDelta = (long)currentTimestamp - (long)timestamp;
-
-                    // Position: right edge - (time delta / time window) * width
-                    float timeRatio = (float)timeDelta / _timeWindowMs;
-                    float x = bounds.Right - (timeRatio * bounds.Width);
-                    float y = bounds.Bottom - (bounds.Height * normalizedValue);
-
-                    // Handle left-edge clipping with interpolation
-                    if (x < bounds.Left)
-                    {
-                        // Point is past the left edge
-                        if (prevValid && prevX >= bounds.Left)
-                        {
-                            // Previous point was visible, interpolate at left boundary
-                            float t = (bounds.Left - prevX) / (x - prevX);
-                            float interpY = prevY + t * (y - prevY);
-
-#if DEBUG
-                            Console.WriteLine($"[TimeSeriesChart] Interpolating at left edge: prevX={prevX:F1}, x={x:F1}, prevY={prevY:F1}, y={y:F1}, t={t:F3}, interpY={interpY:F1}, bounds.Left={bounds.Left:F1}");
-#endif
-
-                            if (firstPoint)
-                            {
-                                fillPath.MoveTo(bounds.Left, bounds.Bottom);
-                                fillPath.LineTo(bounds.Left, interpY);
-                                path.MoveTo(bounds.Left, interpY);
-                                firstPoint = false;
-#if DEBUG
-                                Console.WriteLine($"[TimeSeriesChart] First point interpolated at left edge: ({bounds.Left:F1}, {interpY:F1})");
-#endif
-                            }
-                            else
-                            {
-                                path.LineTo(bounds.Left, interpY);
-                                fillPath.LineTo(bounds.Left, interpY);
-#if DEBUG
-                                Console.WriteLine($"[TimeSeriesChart] Continuing path to interpolated point at left edge: ({bounds.Left:F1}, {interpY:F1})");
-#endif
-                            }
-                        }
-                        // Update previous and continue (don't render this point)
-                        prevX = x;
-                        prevY = y;
-                        prevValid = true;
-                        continue;
-                    }
-
-                    // Point is visible
-                    if (firstPoint)
-                    {
-                        // Check if we need to interpolate at left edge first
-                        if (prevValid && prevX < bounds.Left)
-                        {
-                            // Interpolate entry point at left boundary
-                            float t = (bounds.Left - prevX) / (x - prevX);
-                            float interpY = prevY + t * (y - prevY);
-#if DEBUG
-                            Console.WriteLine($"[TimeSeriesChart] Entry interpolation from left: prevX={prevX:F1}, x={x:F1}, prevY={prevY:F1}, y={y:F1}, t={t:F3}, interpY={interpY:F1}");
-#endif
-                            fillPath.MoveTo(bounds.Left, bounds.Bottom);
-                            fillPath.LineTo(bounds.Left, interpY);
-                            path.MoveTo(bounds.Left, interpY);
-                            // Draw to current point after interpolation
-                            path.LineTo(x, y);
-                            fillPath.LineTo(x, y);
-                        }
-                        else
-                        {
-                            fillPath.MoveTo(x, bounds.Bottom);
-                            fillPath.LineTo(x, y);
-                            path.MoveTo(x, y);
-                        }
-                        firstPoint = false;
-                    }
-                    else
-                    {
-                        path.LineTo(x, y);
-                        fillPath.LineTo(x, y);
-                    }
-
+                    // Update previous and skip
                     prevX = x;
                     prevY = y;
                     prevValid = true;
+                    continue;
                 }
 
-                if (!firstPoint)
+                // Handle left-edge clipping with interpolation
+                if (x < bounds.Left)
                 {
-                    // Complete fill path back to bottom-right
-                    // Calculate where the last point should be relative to current time
-                    uint lastDataTimestamp = _timestamps.Last();
-                    long lastTimeDelta = (long)currentTimestamp - (long)lastDataTimestamp;
-                    float lastTimeRatio = (float)lastTimeDelta / _timeWindowMs;
-                    float lastX = bounds.Right - (lastTimeRatio * bounds.Width);
-                    fillPath.LineTo(lastX, bounds.Bottom);
-                    fillPath.Close();
+                    // Point is just outside the left edge (within margin)
+                    // Keep for interpolation
+                    prevX = x;
+                    prevY = y;
+                    prevValid = true;
+                    continue;
                 }
-            }
-            else
-            {
-                // Fallback: evenly-spaced rendering (old behavior)
-                float xStep = bounds.Width / (dataLength - 1);
-                fillPath.MoveTo(bounds.Left, bounds.Bottom);
 
-                bool firstPoint = true;
-                int i = 0;
-                foreach (var value in series.Data)
+                // Check if we've gone past the right edge
+                if (x > bounds.Right)
                 {
-                    float normalizedValue = (value - _minValue) / valueRange;
-                    normalizedValue = Math.Clamp(normalizedValue, 0f, 1f);
-
-                    float x = bounds.Left + (i * xStep);
-                    float y = bounds.Bottom - (bounds.Height * normalizedValue);
-
-                    if (firstPoint)
+                    // Interpolate at right boundary if we have a previous visible point
+                    if (!firstPoint && prevValid && prevX <= bounds.Right)
                     {
-                        path.MoveTo(x, y);
-                        fillPath.LineTo(x, y);
-                        firstPoint = false;
+                        float t = (bounds.Right - prevX) / (x - prevX);
+                        float interpY = prevY + t * (y - prevY);
+#if DEBUG
+                        Console.WriteLine($"[{series.Label}] Right edge interpolation: prevX={prevX:F1} x={x:F1} t={t:F3} interpY={interpY:F1}");
+#endif
+                        path.LineTo(bounds.Right, interpY);
+                        fillPath.LineTo(bounds.Right, interpY);
+
+                        // Complete fill and break
+                        fillPath.LineTo(bounds.Right, bounds.Bottom);
+                        fillPath.Close();
+                        canvas.DrawPath(fillPath, fillPaint);
+                        canvas.DrawPath(path, linePaint);
+                        goto NextSeries; // Break to outer foreach
                     }
-                    else
+                    // No interpolation needed, complete what we have
+                    if (!firstPoint)
                     {
+                        fillPath.LineTo(prevX, bounds.Bottom);
+                        fillPath.Close();
+                        canvas.DrawPath(fillPath, fillPaint);
+                        canvas.DrawPath(path, linePaint);
+                        goto NextSeries;
+                    }
+                    break;
+                }
+
+                // Point is visible (bounds.Left <= x <= bounds.Right)
+                if (firstPoint)
+                {
+                    // Check if we need to interpolate at left edge first
+                    if (prevValid && prevX < bounds.Left)
+                    {
+                        // Interpolate entry point at left boundary
+                        float t = (bounds.Left - prevX) / (x - prevX);
+                        float interpY = prevY + t * (y - prevY);
+#if DEBUG
+                        Console.WriteLine($"[{series.Label}] Left edge interpolation: prevX={prevX:F1} x={x:F1} t={t:F3} interpY={interpY:F1}");
+#endif
+                        // Start path at left edge with interpolated value
+                        fillPath.MoveTo(bounds.Left, bounds.Bottom);
+                        fillPath.LineTo(bounds.Left, interpY);
+                        path.MoveTo(bounds.Left, interpY);
+                        // Draw to current visible point
                         path.LineTo(x, y);
                         fillPath.LineTo(x, y);
                     }
-
-                    i++;
+                    else
+                    {
+                        // No previous point or previous was also visible
+                        // Start directly at current point
+                        fillPath.MoveTo(x, bounds.Bottom);
+                        fillPath.LineTo(x, y);
+                        path.MoveTo(x, y);
+#if DEBUG
+                        Console.WriteLine($"[{series.Label}] First visible point (no interpolation): x={x:F1} y={y:F1}");
+#endif
+                    }
+                    firstPoint = false;
+                }
+                else
+                {
+                    path.LineTo(x, y);
+                    fillPath.LineTo(x, y);
                 }
 
-                fillPath.LineTo(bounds.Left + ((dataLength - 1) * xStep), bounds.Bottom);
+                prevX = x;
+                prevY = y;
+                prevValid = true;
+            }
+
+            // Only reached if we didn't break early (all samples are within or before visible area)
+            if (!firstPoint)
+            {
+                // Extend to right edge if last data point is before current time
+                if (prevValid && prevX < bounds.Right)
+                {
+                    path.LineTo(bounds.Right, prevY);
+                    fillPath.LineTo(bounds.Right, prevY);
+#if DEBUG
+                    Console.WriteLine($"[{series.Label}] Extending to right edge: ({bounds.Right:F1}, {prevY:F1})");
+#endif
+                }
+
+                // Complete fill path back to bottom
+                fillPath.LineTo(prevX < bounds.Right ? bounds.Right : prevX, bounds.Bottom);
                 fillPath.Close();
             }
 
             // Draw fill first, then line on top
             canvas.DrawPath(fillPath, fillPaint);
             canvas.DrawPath(path, linePaint);
+
+            NextSeries:; // Label for early exit from right edge interpolation
         }
     }
 
     private void DrawTimeLabels(SKCanvas canvas, SKRect bounds)
     {
-        // Time window in seconds (samples * interval in ms / 1000)
-        float totalSeconds = _maxDataPoints * (_collectionIntervalMs / 1000f);
+        // Use the actual time window (matches rendering calculation)
+        float totalSeconds = _timeWindowMs / 1000f;
 
         // Draw labels at 0s, 25%, 50%, 75%, 100%
         for (int i = 0; i <= 4; i++)

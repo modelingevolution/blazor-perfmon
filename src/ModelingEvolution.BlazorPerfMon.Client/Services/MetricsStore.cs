@@ -16,9 +16,15 @@ public sealed class MetricsStore
     /// </summary>
     public event Action? OnMetricsUpdated;
 
-    public MetricsStore(int capacity)
+    /// <summary>
+    /// Creates a new MetricsStore with the specified number of intervals.
+    /// Buffer capacity is intervals + 1 to properly represent the time range.
+    /// Example: 120 intervals × 500ms = 60 seconds requires 121 sample points.
+    /// </summary>
+    public MetricsStore(int intervals)
     {
-        _buffer = new ImmutableCircularBuffer<MetricSample>(capacity);
+        // Buffer needs intervals + 1 samples to represent the full time range
+        _buffer = new ImmutableCircularBuffer<MetricSample>(intervals + 5);
     }
 
     /// <summary>

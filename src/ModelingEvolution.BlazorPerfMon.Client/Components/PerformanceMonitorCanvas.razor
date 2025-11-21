@@ -2,6 +2,7 @@
 @using Frontend.Rendering
 @using Frontend.Collections
 @using Frontend.Models
+@using Frontend.Extensions
 @using SkiaSharp
 @using SkiaSharp.Views.Blazor
 @using Microsoft.AspNetCore.Components.Web
@@ -349,16 +350,16 @@
         ulong ramTotalBytes = latestSample.Ram.TotalBytes;
         Bytes ramUsed = (long)ramUsedBytes;
         Bytes ramTotal = (long)ramTotalBytes;
-        string totalTitle = $"CPU/GPU/RAM Load ({cpuAvgLatest:F1}% cpu, {gpuAvgLatest:F1}% gpu, {ramUsed}/{ramTotal} ram)";
+        string totalTitle = $"Compute Load ({cpuAvgLatest:F1}% CPU, {gpuAvgLatest:F1}% GPU, {ramUsed}/{ramTotal} RAM)";
 
         var totalSeries = new[]
         {
-            ("CPU Avg", _cpuAvgAccessor as IEnumerable<float>, _cpuAvgAccessor.Count, new SKColor(100, 255, 100)),  // Green
-            ("GPU", _gpuAvgAccessor as IEnumerable<float>, _gpuAvgAccessor.Count, new SKColor(255, 200, 100)),     // Orange
-            ("RAM", _ramPercentAccessor as IEnumerable<float>, _ramPercentAccessor!.Count, new SKColor(100, 200, 255))  // Blue
+            new TimeSeriesF { Label = "CPU Avg", Data = _cpuAvgAccessor, Count = _cpuAvgAccessor.Count, Color = new SKColor(100, 255, 100) },  // Green
+            new TimeSeriesF { Label = "GPU", Data = _gpuAvgAccessor, Count = _gpuAvgAccessor.Count, Color = new SKColor(255, 200, 100) },      // Orange
+            new TimeSeriesF { Label = "RAM", Data = _ramPercentAccessor!, Count = _ramPercentAccessor!.Count, Color = new SKColor(100, 200, 255) }  // Blue
         };
 
-        _totalAverageChart.SetMultiSeriesDataWithTimestamps(
+        _totalAverageChart.Setup(
             totalTitle,
             totalSeries,
             _timestampAccessor,
@@ -381,15 +382,15 @@
         float txLatest = _networkTxAccessor!.Last();
         Bytes rxBytes = (long)rxLatest;
         Bytes txBytes = (long)txLatest;
-        string networkTitle = $"Network {networkInterface} ({FormatBytesFixed(rxBytes)}/s rx, {FormatBytesFixed(txBytes)}/s tx)";
+        string networkTitle = $"Network {networkInterface} ({rxBytes.FormatFixed()}/s rx, {txBytes.FormatFixed()}/s tx)";
 
         var networkSeries = new[]
         {
-            ("Rx", _networkRxAccessor as IEnumerable<float>, _networkRxAccessor.Count, new SKColor(100, 255, 100)),  // Green
-            ("Tx", _networkTxAccessor as IEnumerable<float>, _networkTxAccessor.Count, new SKColor(100, 200, 255))   // Blue
+            new TimeSeriesF { Label = "Rx", Data = _networkRxAccessor!, Count = _networkRxAccessor!.Count, Color = new SKColor(100, 255, 100) },  // Green
+            new TimeSeriesF { Label = "Tx", Data = _networkTxAccessor!, Count = _networkTxAccessor!.Count, Color = new SKColor(100, 200, 255) }   // Blue
         };
 
-        _networkChart.SetMultiSeriesDataWithTimestamps(
+        _networkChart.Setup(
             networkTitle,
             networkSeries,
             _timestampAccessor,
@@ -407,15 +408,15 @@
         float writeLatest = _diskWriteAccessor!.Last();
         Bytes readBytes = (long)readLatest;
         Bytes writeBytes = (long)writeLatest;
-        string diskTitle = $"Disk I/O ({FormatBytesFixed(readBytes)}/s read, {FormatBytesFixed(writeBytes)}/s write)";
+        string diskTitle = $"Disk I/O ({readBytes.FormatFixed()}/s read, {writeBytes.FormatFixed()}/s write)";
 
         var diskSeries = new[]
         {
-            ("Read", _diskReadAccessor as IEnumerable<float>, _diskReadAccessor.Count, new SKColor(100, 255, 100)),  // Green
-            ("Write", _diskWriteAccessor as IEnumerable<float>, _diskWriteAccessor.Count, new SKColor(255, 200, 100))  // Orange
+            new TimeSeriesF { Label = "Read", Data = _diskReadAccessor!, Count = _diskReadAccessor!.Count, Color = new SKColor(100, 255, 100) },  // Green
+            new TimeSeriesF { Label = "Write", Data = _diskWriteAccessor!, Count = _diskWriteAccessor!.Count, Color = new SKColor(255, 200, 100) }  // Orange
         };
 
-        _diskChart.SetMultiSeriesDataWithTimestamps(
+        _diskChart.Setup(
             diskTitle,
             diskSeries,
             _timestampAccessor,
@@ -462,17 +463,6 @@
         _networkTxAccessor?.UpdateBuffer(buffer);
         _diskReadAccessor?.UpdateBuffer(buffer);
         _diskWriteAccessor?.UpdateBuffer(buffer);
-    }
-
-    /// <summary>
-    /// Formats Bytes to fixed width to prevent label jumping.
-    /// Format: "###.# XU" where X is unit (B, KB, MB, GB, TB) - max 8 chars.
-    /// </summary>
-    private string FormatBytesFixed(Bytes value)
-    {
-        string formatted = value.ToString();
-        // Pad left to 8 characters for consistent width (e.g., "123.4 KB")
-        return formatted.PadLeft(8);
     }
 
     public async ValueTask DisposeAsync()
