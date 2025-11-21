@@ -1,4 +1,5 @@
 using MessagePack;
+using Frontend.Models;
 
 namespace Backend.Core;
 
@@ -20,10 +21,11 @@ public sealed class MetricsSnapshot
     public uint TimestampMs { get; init; }
 
     /// <summary>
-    /// GPU load percentage (0-100). Stage 4 only.
+    /// GPU load percentages (0-100) per GPU. Stage 4 only.
+    /// Single element array for SMI (single GPU), multiple elements for Tegra (multiple GPUs).
     /// </summary>
     [Key(1)]
-    public float GpuLoad { get; init; }
+    public float[]? GpuLoads { get; init; }
 
     /// <summary>
     /// CPU load percentage per core (0-100). Stage 1+. Array of 8 values for Jetson Orin NX.
@@ -32,16 +34,11 @@ public sealed class MetricsSnapshot
     public float[]? CpuLoads { get; init; }
 
     /// <summary>
-    /// Network received bytes per second. Stage 2+.
+    /// Network metrics per interface. Stage 2+.
+    /// Array of NetworkMetric structures, one per monitored interface.
     /// </summary>
     [Key(3)]
-    public ulong NetworkRxBytes { get; init; }
-
-    /// <summary>
-    /// Network transmitted bytes per second. Stage 2+.
-    /// </summary>
-    [Key(4)]
-    public ulong NetworkTxBytes { get; init; }
+    public NetworkMetric[]? NetworkMetrics { get; init; }
 
     /// <summary>
     /// RAM usage percentage (0-100). Stage 4 only.
@@ -78,4 +75,16 @@ public sealed class MetricsSnapshot
     /// </summary>
     [Key(10)]
     public uint CollectionTimeMs { get; init; }
+
+    /// <summary>
+    /// RAM currently in use, in bytes. Stage 4 only.
+    /// </summary>
+    [Key(11)]
+    public ulong RamUsedBytes { get; init; }
+
+    /// <summary>
+    /// Total system RAM, in bytes. Stage 4 only.
+    /// </summary>
+    [Key(12)]
+    public ulong RamTotalBytes { get; init; }
 }

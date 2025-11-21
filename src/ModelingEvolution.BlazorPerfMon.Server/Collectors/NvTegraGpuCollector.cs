@@ -91,12 +91,14 @@ public sealed class NvTegraGpuCollector : IGpuCollector
 
     /// <summary>
     /// Returns the latest GPU utilization from tegrastats.
+    /// Currently returns single-element array for GR3D_FREQ.
+    /// TODO: Extend to support multiple GPUs on Tegra platforms with multiple GPU clusters.
     /// </summary>
-    public float Collect()
+    public float[] Collect()
     {
         lock (_lock)
         {
-            return _latestGpuUtil;
+            return new float[] { _latestGpuUtil };
         }
     }
 

@@ -1,6 +1,7 @@
 using System.Buffers;
 using System.Net.WebSockets;
 using System.Threading.Tasks.Dataflow;
+using MessagePack;
 using Microsoft.Extensions.Logging;
 
 namespace Backend.Services;
@@ -8,15 +9,21 @@ namespace Backend.Services;
 /// <summary>
 /// Handles WebSocket connections and integrates with MultiplexService.
 /// Each client gets a dedicated ActionBlock for sending metrics.
+/// Sends PerformanceConfigurationSnapshot as first message.
 /// </summary>
 public sealed class WebSocketService
 {
     private readonly MultiplexService _multiplexService;
+    private readonly MetricsConfigurationBuilder _configurationBuilder;
     private readonly ILogger<WebSocketService> _logger;
 
-    public WebSocketService(MultiplexService multiplexService, ILogger<WebSocketService> logger)
+    public WebSocketService(
+        MultiplexService multiplexService,
+        MetricsConfigurationBuilder configurationBuilder,
+        ILogger<WebSocketService> logger)
     {
         _multiplexService = multiplexService;
+        _configurationBuilder = configurationBuilder;
         _logger = logger;
     }
 
@@ -31,6 +38,16 @@ public sealed class WebSocketService
         try
         {
             _logger.LogInformation("WebSocket client connected");
+
+            // Send configuration snapshot as first message
+            var configuration = _configurationBuilder.BuildConfiguration();
+            var configData = MessagePackSerializer.Serialize(configuration);
+            await webSocket.SendAsync(
+                new ReadOnlyMemory<byte>(configData),
+                WebSocketMessageType.Binary,
+                endOfMessage: true,
+                cancellationToken);
+            _logger.LogInformation("Sent configuration snapshot to client");
 
             // Create an ActionBlock for this client
             clientTarget = _multiplexService.CreateClientTarget(async data =>

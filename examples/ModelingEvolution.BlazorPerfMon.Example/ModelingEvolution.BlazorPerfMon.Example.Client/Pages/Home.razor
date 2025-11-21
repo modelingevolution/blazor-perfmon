@@ -1,0 +1,30 @@
+@page "/"
+@using ModelingEvolution.BlazorPerfMon.Client.Components
+@rendermode @(new InteractiveWebAssemblyRenderMode(prerender: false))
+
+<PageTitle>Jetson Monitor</PageTitle>
+
+<div class="page-container">
+    <PerformanceMonitorCanvas ShowStatusIndicator="true" BackgroundColor="#1a1a1a" />
+</div>
+
+<style>
+    body, html {
+        margin: 0;
+        padding: 0;
+        overflow: hidden;
+        width: 100%;
+        height: 100%;
+    }
+
+    .page-container {
+        width: 100vw;
+        height: 100vh;
+        margin: 0;
+        padding: 0;
+        position: fixed;
+        top: 0;
+        left: 0;
+        overflow: hidden;
+    }
+</style>

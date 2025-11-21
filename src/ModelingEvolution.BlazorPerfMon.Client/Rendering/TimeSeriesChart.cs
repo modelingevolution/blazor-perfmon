@@ -8,8 +8,9 @@ namespace Frontend.Rendering;
 public sealed class TimeSeriesChart : ChartBase
 {
     private readonly SKPaint _axisPaint;
-    private readonly List<(string Label, float[] Data, SKColor Color)> _dataSeries = new();
-    private uint[] _timestamps = Array.Empty<uint>();
+    private readonly List<(string Label, IEnumerable<float> Data, int Count, SKColor Color)> _dataSeries = new();
+    private IEnumerable<uint> _timestamps = Enumerable.Empty<uint>();
+    private int _timestampCount = 0;
 
     private string _title = "Time Series";
     private int _maxDataPoints = 120;
@@ -33,13 +34,13 @@ public sealed class TimeSeriesChart : ChartBase
     /// <summary>
     /// Sets the data for the time series chart (single series).
     /// </summary>
-    public void SetData(string title, float[] dataPoints, int maxDataPoints, int collectionIntervalMs = 500)
+    public void SetData(string title, IEnumerable<float> dataPoints, int count, int maxDataPoints, int collectionIntervalMs = 500)
     {
         _title = title;
         _maxDataPoints = maxDataPoints;
         _collectionIntervalMs = collectionIntervalMs;
         _dataSeries.Clear();
-        _dataSeries.Add((title, dataPoints, new SKColor(100, 255, 100))); // Green
+        _dataSeries.Add((title, dataPoints, count, new SKColor(100, 255, 100))); // Green
         _useDynamicScale = false;
         _minValue = 0f;
         _maxValue = 100f;
@@ -48,7 +49,7 @@ public sealed class TimeSeriesChart : ChartBase
     /// <summary>
     /// Sets the data for the time series chart with multiple series and dynamic scaling.
     /// </summary>
-    public void SetMultiSeriesData(string title, (string Label, float[] Data, SKColor Color)[] series, int maxDataPoints, int collectionIntervalMs, bool useDynamicScale = false)
+    public void SetMultiSeriesData(string title, (string Label, IEnumerable<float> Data, int Count, SKColor Color)[] series, int maxDataPoints, int collectionIntervalMs, bool useDynamicScale = false)
     {
         _title = title;
         _maxDataPoints = maxDataPoints;
@@ -57,7 +58,8 @@ public sealed class TimeSeriesChart : ChartBase
         _dataSeries.Clear();
         _dataSeries.AddRange(series);
         _useDynamicScale = useDynamicScale;
-        _timestamps = Array.Empty<uint>();
+        _timestamps = Enumerable.Empty<uint>();
+        _timestampCount = 0;
 
         if (_useDynamicScale)
         {
@@ -72,15 +74,17 @@ public sealed class TimeSeriesChart : ChartBase
 
     /// <summary>
     /// Sets the data with timestamps for precise time-based rendering.
+    /// Accepts IEnumerable for zero-copy architecture.
     /// </summary>
-    public void SetMultiSeriesDataWithTimestamps(string title, (string Label, float[] Data, SKColor Color)[] series, uint[] timestamps, int timeWindowMs, bool useDynamicScale = false)
+    public void SetMultiSeriesDataWithTimestamps(string title, (string Label, IEnumerable<float> Data, int Count, SKColor Color)[] series, IEnumerable<uint> timestamps, int timestampCount, int timeWindowMs, bool useDynamicScale = false)
     {
         _title = title;
         _dataSeries.Clear();
         _dataSeries.AddRange(series);
         _timestamps = timestamps;
+        _timestampCount = timestampCount;
         _timeWindowMs = timeWindowMs;
-        _maxDataPoints = timestamps.Length;
+        _maxDataPoints = timestampCount;
         _useDynamicScale = useDynamicScale;
 
         if (_useDynamicScale)
@@ -136,7 +140,7 @@ public sealed class TimeSeriesChart : ChartBase
 
     protected override void RenderContent(SKCanvas canvas)
     {
-        if (_dataSeries.Count == 0 || _dataSeries[0].Data.Length == 0)
+        if (_dataSeries.Count == 0 || _dataSeries[0].Count == 0)
             return;
 
         var bounds = Bounds;
@@ -205,11 +209,11 @@ public sealed class TimeSeriesChart : ChartBase
         if (valueRange < 0.01f) valueRange = 1f;
 
         // Use timestamp-based rendering if timestamps are available
-        bool useTimestamps = _timestamps != null && _timestamps.Length > 0;
+        bool useTimestamps = _timestampCount > 0;
 
         foreach (var series in _dataSeries)
         {
-            if (series.Data.Length < 2)
+            if (series.Count < 2)
                 continue;
 
             using var linePaint = new SKPaint
@@ -230,13 +234,11 @@ public sealed class TimeSeriesChart : ChartBase
             using var path = new SKPath();
             using var fillPath = new SKPath();
 
-            int dataLength = Math.Min(series.Data.Length, useTimestamps ? _timestamps.Length : series.Data.Length);
+            int dataLength = Math.Min(series.Count, useTimestamps ? _timestampCount : series.Count);
             if (dataLength < 2) continue;
 
-            int startIndex = Math.Max(0, series.Data.Length - dataLength);
-
             // Calculate X positions based on timestamps or evenly-spaced fallback
-            if (useTimestamps && _timestamps.Length > 0)
+            if (useTimestamps && _timestampCount > 0)
             {
                 // Timestamp-based rendering: right edge = current time (not latest data!)
                 uint currentTimestamp = (uint)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
@@ -245,19 +247,13 @@ public sealed class TimeSeriesChart : ChartBase
                 float prevX = 0, prevY = 0;
                 bool prevValid = false;
 
-                for (int i = 0; i < dataLength; i++)
+                // Zip data with timestamps for correlated enumeration
+                foreach (var (value, timestamp) in series.Data.Zip(_timestamps))
                 {
-                    int dataIndex = startIndex + i;
-                    int timestampIndex = Math.Max(0, _timestamps.Length - dataLength + i);
-
-                    if (timestampIndex >= _timestamps.Length) continue;
-
-                    float value = series.Data[dataIndex];
                     float normalizedValue = (value - _minValue) / valueRange;
                     normalizedValue = Math.Clamp(normalizedValue, 0f, 1f);
 
                     // Calculate X position based on timestamp delta from CURRENT time
-                    uint timestamp = _timestamps[timestampIndex];
                     long timeDelta = (long)currentTimestamp - (long)timestamp;
 
                     // Position: right edge - (time delta / time window) * width
@@ -275,17 +271,27 @@ public sealed class TimeSeriesChart : ChartBase
                             float t = (bounds.Left - prevX) / (x - prevX);
                             float interpY = prevY + t * (y - prevY);
 
+#if DEBUG
+                            Console.WriteLine($"[TimeSeriesChart] Interpolating at left edge: prevX={prevX:F1}, x={x:F1}, prevY={prevY:F1}, y={y:F1}, t={t:F3}, interpY={interpY:F1}, bounds.Left={bounds.Left:F1}");
+#endif
+
                             if (firstPoint)
                             {
                                 fillPath.MoveTo(bounds.Left, bounds.Bottom);
                                 fillPath.LineTo(bounds.Left, interpY);
                                 path.MoveTo(bounds.Left, interpY);
                                 firstPoint = false;
+#if DEBUG
+                                Console.WriteLine($"[TimeSeriesChart] First point interpolated at left edge: ({bounds.Left:F1}, {interpY:F1})");
+#endif
                             }
                             else
                             {
                                 path.LineTo(bounds.Left, interpY);
                                 fillPath.LineTo(bounds.Left, interpY);
+#if DEBUG
+                                Console.WriteLine($"[TimeSeriesChart] Continuing path to interpolated point at left edge: ({bounds.Left:F1}, {interpY:F1})");
+#endif
                             }
                         }
                         // Update previous and continue (don't render this point)
@@ -304,9 +310,15 @@ public sealed class TimeSeriesChart : ChartBase
                             // Interpolate entry point at left boundary
                             float t = (bounds.Left - prevX) / (x - prevX);
                             float interpY = prevY + t * (y - prevY);
+#if DEBUG
+                            Console.WriteLine($"[TimeSeriesChart] Entry interpolation from left: prevX={prevX:F1}, x={x:F1}, prevY={prevY:F1}, y={y:F1}, t={t:F3}, interpY={interpY:F1}");
+#endif
                             fillPath.MoveTo(bounds.Left, bounds.Bottom);
                             fillPath.LineTo(bounds.Left, interpY);
                             path.MoveTo(bounds.Left, interpY);
+                            // Draw to current point after interpolation
+                            path.LineTo(x, y);
+                            fillPath.LineTo(x, y);
                         }
                         else
                         {
@@ -331,7 +343,7 @@ public sealed class TimeSeriesChart : ChartBase
                 {
                     // Complete fill path back to bottom-right
                     // Calculate where the last point should be relative to current time
-                    uint lastDataTimestamp = _timestamps[_timestamps.Length - 1];
+                    uint lastDataTimestamp = _timestamps.Last();
                     long lastTimeDelta = (long)currentTimestamp - (long)lastDataTimestamp;
                     float lastTimeRatio = (float)lastTimeDelta / _timeWindowMs;
                     float lastX = bounds.Right - (lastTimeRatio * bounds.Width);
@@ -346,9 +358,9 @@ public sealed class TimeSeriesChart : ChartBase
                 fillPath.MoveTo(bounds.Left, bounds.Bottom);
 
                 bool firstPoint = true;
-                for (int i = 0; i < dataLength; i++)
+                int i = 0;
+                foreach (var value in series.Data)
                 {
-                    float value = series.Data[startIndex + i];
                     float normalizedValue = (value - _minValue) / valueRange;
                     normalizedValue = Math.Clamp(normalizedValue, 0f, 1f);
 
@@ -366,6 +378,8 @@ public sealed class TimeSeriesChart : ChartBase
                         path.LineTo(x, y);
                         fillPath.LineTo(x, y);
                     }
+
+                    i++;
                 }
 
                 fillPath.LineTo(bounds.Left + ((dataLength - 1) * xStep), bounds.Bottom);

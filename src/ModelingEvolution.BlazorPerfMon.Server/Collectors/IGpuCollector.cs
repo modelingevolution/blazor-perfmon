@@ -7,8 +7,8 @@ namespace Backend.Collectors;
 public interface IGpuCollector
 {
     /// <summary>
-    /// Collects current GPU utilization percentage.
+    /// Collects current GPU utilization percentages for all GPUs.
     /// </summary>
-    /// <returns>GPU utilization (0-100)</returns>
-    float Collect();
+    /// <returns>Array of GPU utilizations (0-100) per GPU. Single element for SMI/NVML, multiple for Tegra.</returns>
+    float[] Collect();
 }

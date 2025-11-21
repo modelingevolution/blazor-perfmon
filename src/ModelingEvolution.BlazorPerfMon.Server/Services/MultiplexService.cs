@@ -1,31 +1,32 @@
 using System.Threading.Tasks.Dataflow;
 using Backend.Core;
+using Backend.Collectors;
 using MessagePack;
 
 namespace Backend.Services;
 
 /// <summary>
 /// TPL Dataflow pipeline for metrics multiplexing.
-/// Stage 4: Uses 3-way JoinBlock to combine (CPU+GPU), Network (with collection time), and Disk data.
+/// Stage 4: Uses 3-way JoinBlock to combine (CPU+GPU+RAM), Network (with collection time), and Disk data.
 /// </summary>
 public sealed class MultiplexService : IDisposable
 {
-    private readonly BufferBlock<(float[] CpuLoads, float GpuLoad, uint TimestampMs)> _cpuGpuBuffer;
-    private readonly BufferBlock<(ulong RxBytes, ulong TxBytes, uint CollectionTimeMs)> _networkBuffer;
+    private readonly BufferBlock<(float[] CpuLoads, float[] GpuLoads, RamMetrics Ram, uint TimestampMs)> _cpuGpuBuffer;
+    private readonly BufferBlock<(NetworkMetric[] Metrics, uint CollectionTimeMs)> _networkBuffer;
     private readonly BufferBlock<(ulong ReadBytes, ulong WriteBytes, uint ReadIops, uint WriteIops)> _diskBuffer;
-    private readonly JoinBlock<(float[], float, uint), (ulong RxBytes, ulong TxBytes, uint CollectionTimeMs), (ulong ReadBytes, ulong WriteBytes, uint ReadIops, uint WriteIops)> _joinBlock;
-    private readonly TransformBlock<Tuple<(float[], float, uint), (ulong, ulong, uint), (ulong, ulong, uint, uint)>, byte[]> _serializeBlock;
+    private readonly JoinBlock<(float[], float[], RamMetrics, uint), (NetworkMetric[], uint), (ulong ReadBytes, ulong WriteBytes, uint ReadIops, uint WriteIops)> _joinBlock;
+    private readonly TransformBlock<Tuple<(float[], float[], RamMetrics, uint), (NetworkMetric[], uint), (ulong, ulong, uint, uint)>, byte[]> _serializeBlock;
     private readonly BroadcastBlock<byte[]> _broadcastBlock;
 
     public MultiplexService()
     {
-        // Stage 4: Separate buffers for CPU+GPU (with timestamp), Network (with collection time), and Disk
-        _cpuGpuBuffer = new BufferBlock<(float[], float, uint)>(new DataflowBlockOptions
+        // Stage 4: Separate buffers for CPU+GPU+RAM (with timestamp), Network (with collection time), and Disk
+        _cpuGpuBuffer = new BufferBlock<(float[], float[], RamMetrics, uint)>(new DataflowBlockOptions
         {
             BoundedCapacity = 2
         });
 
-        _networkBuffer = new BufferBlock<(ulong, ulong, uint)>(new DataflowBlockOptions
+        _networkBuffer = new BufferBlock<(NetworkMetric[], uint)>(new DataflowBlockOptions
         {
             BoundedCapacity = 2
         });
@@ -35,35 +36,54 @@ public sealed class MultiplexService : IDisposable
             BoundedCapacity = 2
         });
 
-        // JoinBlock: Wait for CPU+GPU (with timestamp), Network (with collection time), and Disk data before proceeding
-        _joinBlock = new JoinBlock<(float[], float, uint), (ulong, ulong, uint), (ulong, ulong, uint, uint)>(new GroupingDataflowBlockOptions
+        // JoinBlock: Wait for CPU+GPU+RAM (with timestamp), Network (with collection time), and Disk data before proceeding
+        _joinBlock = new JoinBlock<(float[], float[], RamMetrics, uint), (NetworkMetric[], uint), (ulong, ulong, uint, uint)>(new GroupingDataflowBlockOptions
         {
             BoundedCapacity = 2
         });
 
         // Transform block: Serialize combined data to MessagePack
-        _serializeBlock = new TransformBlock<Tuple<(float[], float, uint), (ulong, ulong, uint), (ulong, ulong, uint, uint)>, byte[]>(
+        _serializeBlock = new TransformBlock<Tuple<(float[], float[], RamMetrics, uint), (NetworkMetric[], uint), (ulong, ulong, uint, uint)>, byte[]>(
             combinedData =>
             {
-                var (cpuGpuData, networkData, diskData) = combinedData;
-                var (cpuLoads, gpuLoad, timestampMs) = cpuGpuData;
-                var (rxBytes, txBytes, collectionTimeMs) = networkData;
+                var (cpuGpuRamData, networkData, diskData) = combinedData;
+                var (cpuLoads, gpuLoads, ram, timestampMs) = cpuGpuRamData;
+                var (networkMetrics, collectionTimeMs) = networkData;
                 var (readBytes, writeBytes, readIops, writeIops) = diskData;
-                var snapshot = new MetricsSnapshot
+
+                // Convert server-side NetworkMetric to shared NetworkMetric for serialization
+                var sharedNetworkMetrics = networkMetrics.Select(n => new Frontend.Models.NetworkMetric
                 {
-                    TimestampMs = timestampMs,
-                    GpuLoad = gpuLoad,
+                    Identifier = n.Identifier,
+                    RxBytes = n.RxBytes,
+                    TxBytes = n.TxBytes
+                }).ToArray();
+
+                var sample = new Frontend.Models.MetricSample
+                {
+                    CreatedAt = timestampMs,
+                    GpuLoads = gpuLoads,
                     CpuLoads = cpuLoads,
-                    NetworkRxBytes = rxBytes,
-                    NetworkTxBytes = txBytes,
-                    DiskReadBytes = readBytes,
-                    DiskWriteBytes = writeBytes,
-                    DiskReadIops = readIops,
-                    DiskWriteIops = writeIops,
-                    CollectionTimeMs = collectionTimeMs
+                    Ram = new Frontend.Models.RamMetric
+                    {
+                        UsedBytes = ram.UsedBytes,
+                        TotalBytes = ram.TotalBytes
+                    },
+                    DiskMetrics = new[]
+                    {
+                        new Frontend.Models.DiskMetric
+                        {
+                            ReadBytes = readBytes,
+                            WriteBytes = writeBytes,
+                            ReadIops = readIops,
+                            WriteIops = writeIops
+                        }
+                    },
+                    NetworkMetrics = sharedNetworkMetrics,
+                    CollectionDurationMs = collectionTimeMs
                 };
 
-                return MessagePackSerializer.Serialize(snapshot);
+                return MessagePackSerializer.Serialize(sample);
             },
             new ExecutionDataflowBlockOptions
             {
@@ -83,21 +103,21 @@ public sealed class MultiplexService : IDisposable
     }
 
     /// <summary>
-    /// Post CPU and GPU metrics to the pipeline with timestamp.
+    /// Post CPU, GPU, and RAM metrics to the pipeline with timestamp.
     /// Returns false if the buffer is full (backpressure).
     /// </summary>
-    public bool PostCpuGpuMetrics(float[] cpuData, float gpuLoad, uint timestampMs)
+    public bool PostCpuGpuRamMetrics(float[] cpuData, float[] gpuLoads, RamMetrics ram, uint timestampMs)
     {
-        return _cpuGpuBuffer.Post((cpuData, gpuLoad, timestampMs));
+        return _cpuGpuBuffer.Post((cpuData, gpuLoads, ram, timestampMs));
     }
 
     /// <summary>
     /// Post Network metrics to the pipeline (includes collection time).
     /// Returns false if the buffer is full (backpressure).
     /// </summary>
-    public bool PostNetworkMetrics(ulong rxBytes, ulong txBytes, uint collectionTimeMs)
+    public bool PostNetworkMetrics(NetworkMetric[] metrics, uint collectionTimeMs)
     {
-        return _networkBuffer.Post((rxBytes, txBytes, collectionTimeMs));
+        return _networkBuffer.Post((metrics, collectionTimeMs));
     }
 
     /// <summary>

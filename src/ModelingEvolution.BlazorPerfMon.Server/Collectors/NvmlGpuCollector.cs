@@ -69,12 +69,12 @@ public sealed class NvmlGpuCollector : IGpuCollector, IDisposable
     /// Returns cached value if query takes longer than timeout (GPU in deep sleep).
     /// Typically takes 0-2ms when GPU is active, 300-400ms when idle.
     /// </summary>
-    /// <returns>GPU utilization percentage (0-100)</returns>
-    public float Collect()
+    /// <returns>Single-element array with GPU utilization percentage (0-100)</returns>
+    public float[] Collect()
     {
         if (!_initialized || _disposed)
         {
-            return 0f;
+            return new float[] { 0f };
         }
 
         try
@@ -86,20 +86,20 @@ public sealed class NvmlGpuCollector : IGpuCollector, IDisposable
             {
                 // Completed within timeout
                 _lastValue = task.Result;
-                return _lastValue;
+                return new float[] { _lastValue };
             }
             else
             {
                 // Timeout - GPU likely in deep sleep, return cached value
                 _logger.LogDebug("GPU query timeout ({TimeoutMs}ms), returning cached value: {Value}%",
                     _timeoutMs, _lastValue);
-                return _lastValue;
+                return new float[] { _lastValue };
             }
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error collecting GPU metrics via NVML");
-            return _lastValue;
+            return new float[] { _lastValue };
         }
     }
 

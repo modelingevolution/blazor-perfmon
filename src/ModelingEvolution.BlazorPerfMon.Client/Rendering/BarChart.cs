@@ -12,8 +12,10 @@ public sealed class BarChart : ChartBase
     private static readonly SKColor BarColor = new SKColor(100, 255, 100); // Green
 
     private string _title = "Bar Chart";
-    private string[] _labels = Array.Empty<string>();
-    private float[] _values = Array.Empty<float>();
+    private IEnumerable<string> _labels = Enumerable.Empty<string>();
+    private int _labelCount = 0;
+    private IEnumerable<float> _values = Enumerable.Empty<float>();
+    private int _valueCount = 0;
 
     public BarChart()
     {
@@ -34,20 +36,25 @@ public sealed class BarChart : ChartBase
 
     /// <summary>
     /// Sets the data for the bar chart.
+    /// Accepts IEnumerable for zero-copy architecture.
     /// </summary>
     /// <param name="title">Chart title</param>
     /// <param name="labels">Labels for each bar</param>
+    /// <param name="labelCount">Number of labels</param>
     /// <param name="values">Values for each bar (0-100)</param>
-    public void SetData(string title, string[] labels, float[] values)
+    /// <param name="valueCount">Number of values</param>
+    public void SetData(string title, IEnumerable<string> labels, int labelCount, IEnumerable<float> values, int valueCount)
     {
         _title = title;
         _labels = labels;
+        _labelCount = labelCount;
         _values = values;
+        _valueCount = valueCount;
     }
 
     protected override void RenderContent(SKCanvas canvas)
     {
-        if (_values.Length == 0)
+        if (_valueCount == 0)
             return;
 
         var bounds = Bounds;
@@ -58,7 +65,7 @@ public sealed class BarChart : ChartBase
         // Calculate bar dimensions
         float barAreaTop = bounds.Top + 50;
         float barAreaHeight = bounds.Height - 60;
-        int barCount = _values.Length;
+        int barCount = _valueCount;
 
         float barHeight = Math.Min(barAreaHeight / barCount - 4, 40); // Max 40px per bar
         float barSpacing = 4f;
@@ -68,23 +75,25 @@ public sealed class BarChart : ChartBase
         float barWidth = bounds.Width - labelWidth - 120f; // Leave space for percentage
 
         // Draw vertical grid lines (25%, 50%, 75%, 100%)
-        for (int i = 1; i <= 4; i++)
+        for (int j = 1; j <= 4; j++)
         {
-            float x = barStartX + (barWidth * i / 4f);
+            float x = barStartX + (barWidth * j / 4f);
             canvas.DrawLine(x, barAreaTop, x, barAreaTop + (barHeight + barSpacing) * barCount, GridPaint);
         }
 
-        for (int i = 0; i < barCount; i++)
+        // Use Zip to enumerate values and labels together
+        int i = 0;
+        foreach (var (value, label) in _values.Zip(_labels))
         {
             float y = barAreaTop + i * (barHeight + barSpacing);
-            float value = Math.Clamp(_values[i], 0f, 100f);
+            float clampedValue = Math.Clamp(value, 0f, 100f);
 
             // Draw bar background
             var barBgRect = new SKRect(barStartX, y, barStartX + barWidth, y + barHeight);
             canvas.DrawRect(barBgRect, _barBackgroundPaint);
 
             // Draw bar foreground (green)
-            float fillWidth = barWidth * (value / 100f);
+            float fillWidth = barWidth * (clampedValue / 100f);
             if (fillWidth > 0)
             {
                 var barRect = new SKRect(barStartX, y, barStartX + fillWidth, y + barHeight);
@@ -92,12 +101,13 @@ public sealed class BarChart : ChartBase
             }
 
             // Draw label
-            string label = i < _labels.Length ? _labels[i] : $"Item {i}";
             canvas.DrawText(label, bounds.Left + 20, y + barHeight / 2 + 5, TextFont, TextPaint);
 
             // Draw percentage
-            string percentage = $"{value:F1}%";
+            string percentage = $"{clampedValue:F1}%";
             canvas.DrawText(percentage, barStartX + barWidth + 10, y + barHeight / 2 + 5, TextFont, TextPaint);
+
+            i++;
         }
     }
 

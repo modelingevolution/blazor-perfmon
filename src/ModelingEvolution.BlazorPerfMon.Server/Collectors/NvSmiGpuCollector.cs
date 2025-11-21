@@ -18,8 +18,8 @@ public sealed class NvSmiGpuCollector : IGpuCollector
     /// <summary>
     /// Collects GPU utilization using nvidia-smi.
     /// </summary>
-    /// <returns>GPU utilization percentage (0-100)</returns>
-    public float Collect()
+    /// <returns>Single-element array with GPU utilization percentage (0-100)</returns>
+    public float[] Collect()
     {
         try
         {
@@ -37,7 +37,7 @@ public sealed class NvSmiGpuCollector : IGpuCollector
             if (process == null)
             {
                 _logger.LogWarning("Failed to start nvidia-smi process");
-                return 0f;
+                return new float[] { 0f };
             }
 
             string output = process.StandardOutput.ReadToEnd();
@@ -48,22 +48,22 @@ public sealed class NvSmiGpuCollector : IGpuCollector
             {
                 _logger.LogWarning("nvidia-smi exited with code {ExitCode}. Stderr: {Error}",
                     process.ExitCode, error);
-                return 0f;
+                return new float[] { 0f };
             }
 
             // Parse output (e.g., "45")
             if (float.TryParse(output.Trim(), out float utilization))
             {
-                return Math.Clamp(utilization, 0f, 100f);
+                return new float[] { Math.Clamp(utilization, 0f, 100f) };
             }
 
             _logger.LogWarning("Failed to parse nvidia-smi output: {Output}", output);
-            return 0f;
+            return new float[] { 0f };
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Error collecting GPU metrics via nvidia-smi");
-            return 0f;
+            return new float[] { 0f };
         }
     }
 }

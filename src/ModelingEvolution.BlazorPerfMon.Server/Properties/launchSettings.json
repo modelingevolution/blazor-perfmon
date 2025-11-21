@@ -1,0 +1,12 @@
+{
+  "profiles": {
+    "ModelingEvolution.BlazorPerfMon.Server": {
+      "commandName": "Project",
+      "launchBrowser": true,
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development"
+      },
+      "applicationUrl": "https://localhost:50448;http://localhost:50449"
+    }
+  }
+}

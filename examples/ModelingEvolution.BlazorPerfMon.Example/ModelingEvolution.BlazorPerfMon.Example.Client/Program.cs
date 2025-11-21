@@ -9,7 +9,7 @@ builder.Services.Configure<MonitorSettings>(
     builder.Configuration.GetSection("MonitorSettings"));
 
 // Register services as singletons
-builder.Services.AddSingleton<MetricsStore>();
+builder.Services.AddSingleton<MetricsStore>(sp => new MetricsStore(capacity: 120)); // 60 seconds at 2Hz
 
 // WebSocket URL configuration
 string wsUrl = builder.HostEnvironment.BaseAddress.Replace("http://", "ws://").Replace("https://", "wss://") + "ws";

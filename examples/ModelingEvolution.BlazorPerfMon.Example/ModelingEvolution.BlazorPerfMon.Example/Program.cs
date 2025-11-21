@@ -11,9 +11,11 @@ builder.Services.Configure<MonitorSettings>(
 
 // Register Backend services as singletons
 builder.Services.AddSingleton<CpuCollector>();
+builder.Services.AddSingleton<RamCollector>();
 builder.Services.AddSingleton<NetworkCollector>();
 builder.Services.AddSingleton<DiskCollector>();
 builder.Services.AddSingleton<MultiplexService>();
+builder.Services.AddSingleton<MetricsConfigurationBuilder>();
 builder.Services.AddSingleton<WebSocketService>();
 
 // Register GPU collector based on configuration
@@ -86,6 +88,7 @@ app.MapRazorComponents<ModelingEvolution.BlazorPerfMon.Example.Components.App>()
 
 // Start metrics collection using PeriodicTimer
 var cpuCollector = app.Services.GetRequiredService<CpuCollector>();
+var ramCollector = app.Services.GetRequiredService<RamCollector>();
 var networkCollector = app.Services.GetRequiredService<NetworkCollector>();
 var diskCollector = app.Services.GetRequiredService<DiskCollector>();
 var gpuCollector = app.Services.GetRequiredService<IGpuCollector>();
@@ -113,6 +116,9 @@ _ = Task.Run(async () =>
             var cpuSw = System.Diagnostics.Stopwatch.StartNew();
             var cpuTask = Task.Run(() => { var result = cpuCollector.Collect(); cpuSw.Stop(); return result; }, cancellationTokenSource.Token);
 
+            var ramSw = System.Diagnostics.Stopwatch.StartNew();
+            var ramTask = Task.Run(() => { var result = ramCollector.Collect(); ramSw.Stop(); return result; }, cancellationTokenSource.Token);
+
             var gpuSw = System.Diagnostics.Stopwatch.StartNew();
             var gpuTask = Task.Run(() => { var result = gpuCollector.Collect(); gpuSw.Stop(); return result; }, cancellationTokenSource.Token);
 
@@ -122,7 +128,7 @@ _ = Task.Run(async () =>
             var diskSw = System.Diagnostics.Stopwatch.StartNew();
             var diskTask = Task.Run(() => { var result = diskCollector.Collect(); diskSw.Stop(); return result; }, cancellationTokenSource.Token);
 
-            await Task.WhenAll(cpuTask, gpuTask, networkTask, diskTask);
+            await Task.WhenAll(cpuTask, ramTask, gpuTask, networkTask, diskTask);
 
             stopwatch.Stop();
             var collectionTimeMs = (uint)stopwatch.ElapsedMilliseconds;
@@ -130,15 +136,15 @@ _ = Task.Run(async () =>
             // Log individual collector timings when total exceeds interval
             if (collectionTimeMs > settings.CollectionIntervalMs)
             {
-                logger.LogWarning("Collection time {CollectionTimeMs}ms exceeds interval {IntervalMs}ms. CPU: {CpuMs}ms, GPU: {GpuMs}ms, Network: {NetworkMs}ms, Disk: {DiskMs}ms",
+                logger.LogWarning("Collection time {CollectionTimeMs}ms exceeds interval {IntervalMs}ms. CPU: {CpuMs}ms, RAM: {RamMs}ms, GPU: {GpuMs}ms, Network: {NetworkMs}ms, Disk: {DiskMs}ms",
                     collectionTimeMs, settings.CollectionIntervalMs,
-                    cpuSw.ElapsedMilliseconds, gpuSw.ElapsedMilliseconds,
+                    cpuSw.ElapsedMilliseconds, ramSw.ElapsedMilliseconds, gpuSw.ElapsedMilliseconds,
                     networkSw.ElapsedMilliseconds, diskSw.ElapsedMilliseconds);
             }
 
             // Post to pipeline with timestamp captured before collection
-            var postSuccess = multiplexService.PostCpuGpuMetrics(cpuTask.Result, gpuTask.Result, timestampMs)
-                            & multiplexService.PostNetworkMetrics(networkTask.Result.RxBytes, networkTask.Result.TxBytes, collectionTimeMs)
+            var postSuccess = multiplexService.PostCpuGpuRamMetrics(cpuTask.Result, gpuTask.Result, ramTask.Result, timestampMs)
+                            & multiplexService.PostNetworkMetrics(networkTask.Result, collectionTimeMs)
                             & multiplexService.PostDiskMetrics(diskTask.Result.ReadBytes, diskTask.Result.WriteBytes, diskTask.Result.ReadIops, diskTask.Result.WriteIops);
 
             if (!postSuccess)

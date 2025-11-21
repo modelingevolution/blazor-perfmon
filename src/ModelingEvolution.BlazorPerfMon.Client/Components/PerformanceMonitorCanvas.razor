@@ -1,0 +1,510 @@
+@using Frontend.Services
+@using Frontend.Rendering
+@using Frontend.Collections
+@using Frontend.Models
+@using SkiaSharp
+@using SkiaSharp.Views.Blazor
+@using Microsoft.AspNetCore.Components.Web
+@using ModelingEvolution
+@implements IAsyncDisposable
+
+<div class="monitor-container">
+    <div class="status-circle @GetStatusClass()"></div>
+    <SKCanvasView @ref="_canvasView" OnPaintSurface="OnPaintSurface" IgnorePixelScaling="false" EnableRenderLoop="true" />
+</div>
+
+<style>
+    .monitor-container {
+        width: 100%;
+        height: 100%;
+        background: #1a1a1a;
+        margin: 0;
+        padding: 0;
+        position: relative;
+        overflow: hidden;
+    }
+
+    .status-circle {
+        position: absolute;
+        top: 15px;
+        right: 15px;
+        width: 20px;
+        height: 20px;
+        border-radius: 50%;
+        z-index: 1000;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.3);
+    }
+
+    .status-green {
+        background: #4caf50;
+    }
+
+    .status-yellow {
+        background: #ffeb3b;
+    }
+
+    .status-red {
+        background: #f44336;
+    }
+
+    canvas {
+        width: 100%;
+        height: 100%;
+        display: block;
+    }
+</style>
+
+@code {
+    [Inject] private WebSocketClient WebSocketClient { get; set; } = default!;
+    [Inject] private MetricsStore MetricsStore { get; set; } = default!;
+
+    /// <summary>
+    /// WebSocket server URL to connect to. If null, uses the default from WebSocketClient configuration.
+    /// </summary>
+    [Parameter] public string? ServerUrl { get; set; }
+
+    /// <summary>
+    /// Whether to show the connection status indicator (default: true).
+    /// </summary>
+    [Parameter] public bool ShowStatusIndicator { get; set; } = true;
+
+    /// <summary>
+    /// Background color for the monitor canvas (default: #1a1a1a).
+    /// </summary>
+    [Parameter] public string BackgroundColor { get; set; } = "#1a1a1a";
+
+    private SKCanvasView? _canvasView;
+    private BarChart? _cpuBarChart;
+    private BarChart? _gpuBarChart;
+    private TimeSeriesChart? _totalAverageChart;
+    private TimeSeriesChart? _networkChart;
+    private TimeSeriesChart? _diskChart;
+
+    private bool _isConnected;
+    private uint _latestCollectionTimeMs;
+    private string _currentStatusClass = "status-red";
+    private PeriodicTimer? _scaleUpdateTimer;
+    private Task? _scaleUpdateTask;
+
+    // Configuration and accessors
+    private PerformanceConfigurationSnapshot? _configuration;
+    private int _cpuCount;
+    private int _gpuCount;
+    private int _timeWindowMs = 60000; // Default 60 seconds
+    private int _collectionIntervalMs = 500; // Default 500ms
+
+    // Sample accessors for zero-copy rendering
+    private SampleAccessor<float>[]? _cpuAccessors;
+    private SampleAccessor<float>[]? _gpuAccessors;
+    private SampleAccessor<string>[]? _cpuLabelAccessors;
+    private SampleAccessor<string>[]? _gpuLabelAccessors;
+    private SampleAccessor<float>? _cpuAvgAccessor;
+    private SampleAccessor<float>? _gpuAvgAccessor;
+    private SampleAccessor<float>? _ramPercentAccessor;
+    private SampleAccessor<uint>? _timestampAccessor;
+    private SampleAccessor<float>? _networkRxAccessor;
+    private SampleAccessor<float>? _networkTxAccessor;
+    private SampleAccessor<float>? _diskReadAccessor;
+    private SampleAccessor<float>? _diskWriteAccessor;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _cpuBarChart = new BarChart();
+        _gpuBarChart = new BarChart();
+        _totalAverageChart = new TimeSeriesChart();
+        _networkChart = new TimeSeriesChart();
+        _diskChart = new TimeSeriesChart();
+
+        // Subscribe to WebSocket events
+        WebSocketClient.OnConfigurationReceived += OnConfigurationReceived;
+        WebSocketClient.OnMetricsReceived += OnMetricsReceived;
+        WebSocketClient.OnConnectionStateChanged += OnConnectionStateChanged;
+
+        // Subscribe to metrics store updates
+        MetricsStore.OnMetricsUpdated += OnMetricsUpdated;
+
+        // Connect to WebSocket
+        await WebSocketClient.ConnectAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender && _canvasView != null)
+        {
+            // Start scale update timer (every 5 seconds)
+            _scaleUpdateTimer = new PeriodicTimer(TimeSpan.FromSeconds(5));
+            _scaleUpdateTask = ScaleUpdateLoop();
+        }
+    }
+
+    private async Task ScaleUpdateLoop()
+    {
+        if (_scaleUpdateTimer == null) return;
+
+        try
+        {
+            while (await _scaleUpdateTimer.WaitForNextTickAsync())
+            {
+                _networkChart?.UpdateDynamicScale();
+                _diskChart?.UpdateDynamicScale();
+            }
+        }
+        catch (OperationCanceledException)
+        {
+            // Timer disposed
+        }
+    }
+
+    private void OnConfigurationReceived(PerformanceConfigurationSnapshot configuration)
+    {
+        _configuration = configuration;
+        _collectionIntervalMs = (int)configuration.CollectionIntervalMs;
+        _timeWindowMs = (int)(configuration.DataPointsToKeep * configuration.CollectionIntervalMs);
+
+        // Detect CPU and GPU counts from configuration
+        if (configuration.Layout != null && configuration.Layout.Length > 0)
+        {
+            var row1 = configuration.Layout[0];
+            foreach (var source in row1)
+            {
+                if (source.Name == "CPU" && source.Identifier == null)
+                    _cpuCount = (int)source.Count;
+                else if (source.Name == "GPU" && source.Identifier == null)
+                    _gpuCount = (int)source.Count;
+            }
+        }
+
+        // Create accessors once based on configuration
+        CreateAccessors();
+
+        Console.WriteLine($"Configuration received: {_cpuCount} CPU cores, {_gpuCount} GPUs, {_timeWindowMs}ms window");
+    }
+
+    private void CreateAccessors()
+    {
+        var emptyBuffer = new ImmutableCircularBuffer<MetricSample>(1);
+
+        // CPU accessors (per core)
+        _cpuAccessors = new SampleAccessor<float>[_cpuCount];
+        _cpuLabelAccessors = new SampleAccessor<string>[_cpuCount];
+        for (int i = 0; i < _cpuCount; i++)
+        {
+            int coreIndex = i; // Capture for closure
+            _cpuAccessors[i] = new SampleAccessor<float>(emptyBuffer, sample =>
+                sample.CpuLoads != null && coreIndex < sample.CpuLoads.Length ? sample.CpuLoads[coreIndex] : 0f);
+            _cpuLabelAccessors[i] = new SampleAccessor<string>(emptyBuffer, sample => $"CPU{coreIndex}");
+        }
+
+        // GPU accessors (per GPU)
+        _gpuAccessors = new SampleAccessor<float>[_gpuCount];
+        _gpuLabelAccessors = new SampleAccessor<string>[_gpuCount];
+        for (int i = 0; i < _gpuCount; i++)
+        {
+            int gpuIndex = i; // Capture for closure
+            _gpuAccessors[i] = new SampleAccessor<float>(emptyBuffer, sample =>
+                sample.GpuLoads != null && gpuIndex < sample.GpuLoads.Length ? sample.GpuLoads[gpuIndex] : 0f);
+            _gpuLabelAccessors[i] = new SampleAccessor<string>(emptyBuffer, sample =>
+                _gpuCount > 1 ? $"GPU{gpuIndex}" : "GPU");
+        }
+
+        // Aggregated accessors
+        _cpuAvgAccessor = new SampleAccessor<float>(emptyBuffer, sample =>
+            sample.CpuLoads != null && sample.CpuLoads.Length > 0 ? sample.CpuLoads.Average() : 0f);
+
+        _gpuAvgAccessor = new SampleAccessor<float>(emptyBuffer, sample =>
+            sample.GpuLoads != null && sample.GpuLoads.Length > 0 ? sample.GpuLoads.Average() : 0f);
+
+        _ramPercentAccessor = new SampleAccessor<float>(emptyBuffer, sample =>
+            sample.Ram.TotalBytes > 0 ? (float)sample.Ram.UsedBytes / sample.Ram.TotalBytes * 100f : 0f);
+
+        _timestampAccessor = new SampleAccessor<uint>(emptyBuffer, sample => sample.CreatedAt);
+
+        // Network accessors (first interface, converted to bytes/sec)
+        float intervalSec = _collectionIntervalMs / 1000f;
+        _networkRxAccessor = new SampleAccessor<float>(emptyBuffer, sample =>
+            sample.NetworkMetrics != null && sample.NetworkMetrics.Length > 0
+                ? sample.NetworkMetrics[0].RxBytes / intervalSec : 0f);
+
+        _networkTxAccessor = new SampleAccessor<float>(emptyBuffer, sample =>
+            sample.NetworkMetrics != null && sample.NetworkMetrics.Length > 0
+                ? sample.NetworkMetrics[0].TxBytes / intervalSec : 0f);
+
+        // Disk accessors (first disk, converted to bytes/sec)
+        _diskReadAccessor = new SampleAccessor<float>(emptyBuffer, sample =>
+            sample.DiskMetrics != null && sample.DiskMetrics.Length > 0
+                ? sample.DiskMetrics[0].ReadBytes / intervalSec : 0f);
+
+        _diskWriteAccessor = new SampleAccessor<float>(emptyBuffer, sample =>
+            sample.DiskMetrics != null && sample.DiskMetrics.Length > 0
+                ? sample.DiskMetrics[0].WriteBytes / intervalSec : 0f);
+    }
+
+    private void OnMetricsReceived(MetricSample sample)
+    {
+        MetricsStore.AddSample(sample);
+        _latestCollectionTimeMs = sample.CollectionDurationMs;
+
+        // Only update UI if status changed
+        var newStatus = CalculateStatusClass();
+        if (newStatus != _currentStatusClass)
+        {
+            _currentStatusClass = newStatus;
+            InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void OnConnectionStateChanged(bool isConnected)
+    {
+        _isConnected = isConnected;
+
+        // Connection state change always affects status
+        var newStatus = CalculateStatusClass();
+        if (newStatus != _currentStatusClass)
+        {
+            _currentStatusClass = newStatus;
+            InvokeAsync(StateHasChanged);
+        }
+    }
+
+    private void OnMetricsUpdated()
+    {
+        // Data updated, canvas will be refreshed by render loop
+    }
+
+    private string GetStatusClass() => ShowStatusIndicator ? _currentStatusClass : "";
+
+    private string CalculateStatusClass()
+    {
+        if (!_isConnected)
+            return "status-red";
+
+        return _latestCollectionTimeMs < _collectionIntervalMs ? "status-green" : "status-yellow";
+    }
+
+    private void OnPaintSurface(SKPaintSurfaceEventArgs e)
+    {
+        var canvas = e.Surface.Canvas;
+        canvas.Clear();
+
+        var bounds = new SKRect(0, 0, e.Info.Width, e.Info.Height);
+
+        // Wait for configuration before rendering
+        if (_configuration == null || _cpuAccessors == null || _gpuAccessors == null ||
+            _cpuBarChart == null || _gpuBarChart == null || _totalAverageChart == null ||
+            _networkChart == null || _diskChart == null)
+        {
+            return;
+        }
+
+        // Get current buffer once for time-consistent rendering
+        var buffer = MetricsStore.GetBuffer();
+        if (buffer.Count == 0)
+            return;
+
+        // Update all accessors with the same buffer snapshot
+        UpdateAllAccessors(buffer);
+
+        // Layout: 3 columns in top row, 2 columns in bottom row
+        float thirdWidth = bounds.Width / 3f;
+        float halfWidth = bounds.Width * 0.5f;
+        float halfHeight = bounds.Height * 0.5f;
+
+        // Top-left: CPU bar chart (1/3 width)
+        _cpuBarChart.Location = new SKPoint(0, 0);
+        _cpuBarChart.Size = new SKSize(thirdWidth, halfHeight);
+
+        // Get latest CPU loads for bar chart
+        var latestSample = buffer.Last();
+        var cpuLoads = _cpuAccessors.Select(accessor => accessor.Last()).AsEnumerable();
+        var cpuLabels = _cpuLabelAccessors.Select(accessor => accessor.First()).AsEnumerable();
+
+        _cpuBarChart.SetData("CPU Cores", cpuLabels, _cpuCount, cpuLoads, _cpuCount);
+        _cpuBarChart.Render(canvas);
+
+        // Top-middle: GPU bar chart (1/3 width)
+        _gpuBarChart.Location = new SKPoint(thirdWidth, 0);
+        _gpuBarChart.Size = new SKSize(thirdWidth, halfHeight);
+
+        if (_gpuCount > 0)
+        {
+            var gpuLoads = _gpuAccessors.Select(accessor => accessor.Last()).AsEnumerable();
+            var gpuLabels = _gpuLabelAccessors.Select(accessor => accessor.First()).AsEnumerable();
+            _gpuBarChart.SetData("GPU", gpuLabels, _gpuCount, gpuLoads, _gpuCount);
+        }
+        else
+        {
+            _gpuBarChart.SetData("GPU", new[] { "GPU" }, 1, new[] { 0f }, 1);
+        }
+
+        _gpuBarChart.Render(canvas);
+
+        // Top-right: Total Average CPU + GPU + RAM (1/3 width, 3 series)
+        _totalAverageChart.Location = new SKPoint(thirdWidth * 2, 0);
+        _totalAverageChart.Size = new SKSize(thirdWidth, halfHeight);
+
+        // Get latest values for title
+        float cpuAvgLatest = _cpuAvgAccessor!.Last();
+        float gpuAvgLatest = _gpuAvgAccessor!.Last();
+        ulong ramUsedBytes = latestSample.Ram.UsedBytes;
+        ulong ramTotalBytes = latestSample.Ram.TotalBytes;
+        Bytes ramUsed = (long)ramUsedBytes;
+        Bytes ramTotal = (long)ramTotalBytes;
+        string totalTitle = $"CPU/GPU/RAM Load ({cpuAvgLatest:F1}% cpu, {gpuAvgLatest:F1}% gpu, {ramUsed}/{ramTotal} ram)";
+
+        var totalSeries = new[]
+        {
+            ("CPU Avg", _cpuAvgAccessor as IEnumerable<float>, _cpuAvgAccessor.Count, new SKColor(100, 255, 100)),  // Green
+            ("GPU", _gpuAvgAccessor as IEnumerable<float>, _gpuAvgAccessor.Count, new SKColor(255, 200, 100)),     // Orange
+            ("RAM", _ramPercentAccessor as IEnumerable<float>, _ramPercentAccessor!.Count, new SKColor(100, 200, 255))  // Blue
+        };
+
+        _totalAverageChart.SetMultiSeriesDataWithTimestamps(
+            totalTitle,
+            totalSeries,
+            _timestampAccessor,
+            _timestampAccessor!.Count,
+            _timeWindowMs,
+            useDynamicScale: false);
+        _totalAverageChart.Render(canvas);
+
+        // Bottom-left: Network (Rx + Tx combined, first interface)
+        _networkChart.Location = new SKPoint(0, halfHeight);
+        _networkChart.Size = new SKSize(halfWidth, halfHeight);
+
+        // Get network interface name from first sample
+        string networkInterface = latestSample.NetworkMetrics != null && latestSample.NetworkMetrics.Length > 0
+            ? latestSample.NetworkMetrics[0].Identifier ?? "eth0"
+            : "eth0";
+
+        // Get latest values for title
+        float rxLatest = _networkRxAccessor!.Last();
+        float txLatest = _networkTxAccessor!.Last();
+        Bytes rxBytes = (long)rxLatest;
+        Bytes txBytes = (long)txLatest;
+        string networkTitle = $"Network {networkInterface} ({FormatBytesFixed(rxBytes)}/s rx, {FormatBytesFixed(txBytes)}/s tx)";
+
+        var networkSeries = new[]
+        {
+            ("Rx", _networkRxAccessor as IEnumerable<float>, _networkRxAccessor.Count, new SKColor(100, 255, 100)),  // Green
+            ("Tx", _networkTxAccessor as IEnumerable<float>, _networkTxAccessor.Count, new SKColor(100, 200, 255))   // Blue
+        };
+
+        _networkChart.SetMultiSeriesDataWithTimestamps(
+            networkTitle,
+            networkSeries,
+            _timestampAccessor,
+            _timestampAccessor.Count,
+            _timeWindowMs,
+            useDynamicScale: true);
+        _networkChart.Render(canvas);
+
+        // Bottom-right: Disk I/O (Read + Write)
+        _diskChart.Location = new SKPoint(halfWidth, halfHeight);
+        _diskChart.Size = new SKSize(halfWidth, halfHeight);
+
+        // Get latest values for title
+        float readLatest = _diskReadAccessor!.Last();
+        float writeLatest = _diskWriteAccessor!.Last();
+        Bytes readBytes = (long)readLatest;
+        Bytes writeBytes = (long)writeLatest;
+        string diskTitle = $"Disk I/O ({FormatBytesFixed(readBytes)}/s read, {FormatBytesFixed(writeBytes)}/s write)";
+
+        var diskSeries = new[]
+        {
+            ("Read", _diskReadAccessor as IEnumerable<float>, _diskReadAccessor.Count, new SKColor(100, 255, 100)),  // Green
+            ("Write", _diskWriteAccessor as IEnumerable<float>, _diskWriteAccessor.Count, new SKColor(255, 200, 100))  // Orange
+        };
+
+        _diskChart.SetMultiSeriesDataWithTimestamps(
+            diskTitle,
+            diskSeries,
+            _timestampAccessor,
+            _timestampAccessor.Count,
+            _timeWindowMs,
+            useDynamicScale: true);
+        _diskChart.Render(canvas);
+    }
+
+    /// <summary>
+    /// Updates all SampleAccessors with the current buffer for time-consistent rendering.
+    /// </summary>
+    private void UpdateAllAccessors(ImmutableCircularBuffer<MetricSample> buffer)
+    {
+        if (_cpuAccessors != null)
+        {
+            foreach (var accessor in _cpuAccessors)
+                accessor.UpdateBuffer(buffer);
+        }
+
+        if (_gpuAccessors != null)
+        {
+            foreach (var accessor in _gpuAccessors)
+                accessor.UpdateBuffer(buffer);
+        }
+
+        if (_cpuLabelAccessors != null)
+        {
+            foreach (var accessor in _cpuLabelAccessors)
+                accessor.UpdateBuffer(buffer);
+        }
+
+        if (_gpuLabelAccessors != null)
+        {
+            foreach (var accessor in _gpuLabelAccessors)
+                accessor.UpdateBuffer(buffer);
+        }
+
+        _cpuAvgAccessor?.UpdateBuffer(buffer);
+        _gpuAvgAccessor?.UpdateBuffer(buffer);
+        _ramPercentAccessor?.UpdateBuffer(buffer);
+        _timestampAccessor?.UpdateBuffer(buffer);
+        _networkRxAccessor?.UpdateBuffer(buffer);
+        _networkTxAccessor?.UpdateBuffer(buffer);
+        _diskReadAccessor?.UpdateBuffer(buffer);
+        _diskWriteAccessor?.UpdateBuffer(buffer);
+    }
+
+    /// <summary>
+    /// Formats Bytes to fixed width to prevent label jumping.
+    /// Format: "###.# XU" where X is unit (B, KB, MB, GB, TB) - max 8 chars.
+    /// </summary>
+    private string FormatBytesFixed(Bytes value)
+    {
+        string formatted = value.ToString();
+        // Pad left to 8 characters for consistent width (e.g., "123.4 KB")
+        return formatted.PadLeft(8);
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        // Stop scale update timer
+        _scaleUpdateTimer?.Dispose();
+        if (_scaleUpdateTask != null)
+        {
+            try
+            {
+                await _scaleUpdateTask;
+            }
+            catch { }
+        }
+
+        if (WebSocketClient != null)
+        {
+            WebSocketClient.OnConfigurationReceived -= OnConfigurationReceived;
+            WebSocketClient.OnMetricsReceived -= OnMetricsReceived;
+            WebSocketClient.OnConnectionStateChanged -= OnConnectionStateChanged;
+            await WebSocketClient.DisposeAsync();
+        }
+
+        if (MetricsStore != null)
+        {
+            MetricsStore.OnMetricsUpdated -= OnMetricsUpdated;
+        }
+
+        _cpuBarChart?.Dispose();
+        _gpuBarChart?.Dispose();
+        _totalAverageChart?.Dispose();
+        _networkChart?.Dispose();
+        _diskChart?.Dispose();
+    }
+}
