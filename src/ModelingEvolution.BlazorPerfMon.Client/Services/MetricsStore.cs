@@ -10,6 +10,9 @@ public sealed class MetricsStore
 {
     private const int DataPoints = 120; // 60 seconds at 2Hz
 
+    // Timestamp buffer (shared across all metrics)
+    private readonly CircularBuffer<uint> _timestampBuffer;
+
     // Stage 1: CPU buffers (one per core, dynamically sized)
     private CircularBuffer<float>[] _cpuBuffers;
 
@@ -37,6 +40,7 @@ public sealed class MetricsStore
     public MetricsStore()
     {
         // Start with empty array, will be initialized on first snapshot
+        _timestampBuffer = new CircularBuffer<uint>(DataPoints);
         _cpuBuffers = Array.Empty<CircularBuffer<float>>();
         _totalAverageBuffer = new CircularBuffer<float>(DataPoints);
         _gpuBuffer = new CircularBuffer<float>(DataPoints);
@@ -54,6 +58,9 @@ public sealed class MetricsStore
     /// </summary>
     public void AddSnapshot(MetricsSnapshot snapshot)
     {
+        // Store timestamp
+        _timestampBuffer.Add(snapshot.TimestampMs);
+
         // Stage 1: Store CPU metrics
         if (snapshot.CpuLoads != null && snapshot.CpuLoads.Length > 0)
         {
@@ -115,6 +122,11 @@ public sealed class MetricsStore
     public int CoreCount => _cpuBuffers.Length;
 
     /// <summary>
+    /// Get timestamp buffer (Unix timestamp in milliseconds).
+    /// </summary>
+    public CircularBuffer<uint> GetTimestampBuffer() => _timestampBuffer;
+
+    /// <summary>
     /// Get total average CPU load buffer.
     /// </summary>
     public CircularBuffer<float> GetTotalAverageBuffer() => _totalAverageBuffer;
@@ -159,6 +171,8 @@ public sealed class MetricsStore
     /// </summary>
     public void Clear()
     {
+        _timestampBuffer.Clear();
+
         foreach (var buffer in _cpuBuffers)
         {
             buffer.Clear();

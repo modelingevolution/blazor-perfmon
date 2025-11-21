@@ -224,6 +224,7 @@
             var totalAverageBuffer = MetricsStore.GetTotalAverageBuffer();
             var totalAverageData = totalAverageBuffer.ToArray();
             var gpuData = gpuBuffer.ToArray();
+            var timestamps = MetricsStore.GetTimestampBuffer().ToArray();
 
             // Get latest values for title
             float cpuAvgLatest = totalAverageData.Length > 0 ? totalAverageData[^1] : 0f;
@@ -236,7 +237,8 @@
                 ("GPU", gpuData, new SKColor(255, 200, 100))                // Orange
             };
 
-            _totalAverageChart.SetMultiSeriesData(totalTitle, totalSeries, settings.DataPointsToKeep, settings.CollectionIntervalMs, useDynamicScale: false);
+            int timeWindowMs = settings.DataPointsToKeep * settings.CollectionIntervalMs;
+            _totalAverageChart.SetMultiSeriesDataWithTimestamps(totalTitle, totalSeries, timestamps, timeWindowMs, useDynamicScale: false);
             _totalAverageChart.Render(canvas);
 
             // Bottom-left: Network (Rx + Tx combined)
@@ -259,7 +261,7 @@
                 ("Tx", networkTxData, new SKColor(100, 200, 255))   // Blue
             };
 
-            _networkChart.SetMultiSeriesData(networkTitle, networkSeries, settings.DataPointsToKeep, settings.CollectionIntervalMs, useDynamicScale: true);
+            _networkChart.SetMultiSeriesDataWithTimestamps(networkTitle, networkSeries, timestamps, timeWindowMs, useDynamicScale: true);
             _networkChart.Render(canvas);
 
             // Bottom-right: Disk I/O (Read + Write)
@@ -282,7 +284,7 @@
                 ("Write", diskWriteData, new SKColor(255, 200, 100))  // Orange
             };
 
-            _diskChart.SetMultiSeriesData(diskTitle, diskSeries, settings.DataPointsToKeep, settings.CollectionIntervalMs, useDynamicScale: true);
+            _diskChart.SetMultiSeriesDataWithTimestamps(diskTitle, diskSeries, timestamps, timeWindowMs, useDynamicScale: true);
             _diskChart.Render(canvas);
         }
     }

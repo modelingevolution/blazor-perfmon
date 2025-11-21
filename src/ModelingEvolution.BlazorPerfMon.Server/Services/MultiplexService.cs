@@ -10,17 +10,17 @@ namespace Backend.Services;
 /// </summary>
 public sealed class MultiplexService : IDisposable
 {
-    private readonly BufferBlock<(float[] CpuLoads, float GpuLoad)> _cpuGpuBuffer;
+    private readonly BufferBlock<(float[] CpuLoads, float GpuLoad, uint TimestampMs)> _cpuGpuBuffer;
     private readonly BufferBlock<(ulong RxBytes, ulong TxBytes, uint CollectionTimeMs)> _networkBuffer;
     private readonly BufferBlock<(ulong ReadBytes, ulong WriteBytes, uint ReadIops, uint WriteIops)> _diskBuffer;
-    private readonly JoinBlock<(float[], float), (ulong RxBytes, ulong TxBytes, uint CollectionTimeMs), (ulong ReadBytes, ulong WriteBytes, uint ReadIops, uint WriteIops)> _joinBlock;
-    private readonly TransformBlock<Tuple<(float[], float), (ulong, ulong, uint), (ulong, ulong, uint, uint)>, byte[]> _serializeBlock;
+    private readonly JoinBlock<(float[], float, uint), (ulong RxBytes, ulong TxBytes, uint CollectionTimeMs), (ulong ReadBytes, ulong WriteBytes, uint ReadIops, uint WriteIops)> _joinBlock;
+    private readonly TransformBlock<Tuple<(float[], float, uint), (ulong, ulong, uint), (ulong, ulong, uint, uint)>, byte[]> _serializeBlock;
     private readonly BroadcastBlock<byte[]> _broadcastBlock;
 
     public MultiplexService()
     {
-        // Stage 4: Separate buffers for CPU+GPU, Network (with collection time), and Disk
-        _cpuGpuBuffer = new BufferBlock<(float[], float)>(new DataflowBlockOptions
+        // Stage 4: Separate buffers for CPU+GPU (with timestamp), Network (with collection time), and Disk
+        _cpuGpuBuffer = new BufferBlock<(float[], float, uint)>(new DataflowBlockOptions
         {
             BoundedCapacity = 2
         });
@@ -35,23 +35,23 @@ public sealed class MultiplexService : IDisposable
             BoundedCapacity = 2
         });
 
-        // JoinBlock: Wait for CPU+GPU, Network (with collection time), and Disk data before proceeding
-        _joinBlock = new JoinBlock<(float[], float), (ulong, ulong, uint), (ulong, ulong, uint, uint)>(new GroupingDataflowBlockOptions
+        // JoinBlock: Wait for CPU+GPU (with timestamp), Network (with collection time), and Disk data before proceeding
+        _joinBlock = new JoinBlock<(float[], float, uint), (ulong, ulong, uint), (ulong, ulong, uint, uint)>(new GroupingDataflowBlockOptions
         {
             BoundedCapacity = 2
         });
 
         // Transform block: Serialize combined data to MessagePack
-        _serializeBlock = new TransformBlock<Tuple<(float[], float), (ulong, ulong, uint), (ulong, ulong, uint, uint)>, byte[]>(
+        _serializeBlock = new TransformBlock<Tuple<(float[], float, uint), (ulong, ulong, uint), (ulong, ulong, uint, uint)>, byte[]>(
             combinedData =>
             {
                 var (cpuGpuData, networkData, diskData) = combinedData;
-                var (cpuLoads, gpuLoad) = cpuGpuData;
+                var (cpuLoads, gpuLoad, timestampMs) = cpuGpuData;
                 var (rxBytes, txBytes, collectionTimeMs) = networkData;
                 var (readBytes, writeBytes, readIops, writeIops) = diskData;
                 var snapshot = new MetricsSnapshot
                 {
-                    TimestampMs = (uint)Environment.TickCount,
+                    TimestampMs = timestampMs,
                     GpuLoad = gpuLoad,
                     CpuLoads = cpuLoads,
                     NetworkRxBytes = rxBytes,
@@ -83,12 +83,12 @@ public sealed class MultiplexService : IDisposable
     }
 
     /// <summary>
-    /// Post CPU and GPU metrics to the pipeline.
+    /// Post CPU and GPU metrics to the pipeline with timestamp.
     /// Returns false if the buffer is full (backpressure).
     /// </summary>
-    public bool PostCpuGpuMetrics(float[] cpuData, float gpuLoad)
+    public bool PostCpuGpuMetrics(float[] cpuData, float gpuLoad, uint timestampMs)
     {
-        return _cpuGpuBuffer.Post((cpuData, gpuLoad));
+        return _cpuGpuBuffer.Post((cpuData, gpuLoad, timestampMs));
     }
 
     /// <summary>

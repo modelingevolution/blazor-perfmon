@@ -9,10 +9,12 @@ public sealed class TimeSeriesChart : ChartBase
 {
     private readonly SKPaint _axisPaint;
     private readonly List<(string Label, float[] Data, SKColor Color)> _dataSeries = new();
+    private uint[] _timestamps = Array.Empty<uint>();
 
     private string _title = "Time Series";
     private int _maxDataPoints = 120;
     private int _collectionIntervalMs = 500;
+    private int _timeWindowMs = 60000; // 60 seconds default
     private float _minValue = 0f;
     private float _maxValue = 100f;
     private bool _useDynamicScale = false;
@@ -51,8 +53,34 @@ public sealed class TimeSeriesChart : ChartBase
         _title = title;
         _maxDataPoints = maxDataPoints;
         _collectionIntervalMs = collectionIntervalMs;
+        _timeWindowMs = maxDataPoints * collectionIntervalMs;
         _dataSeries.Clear();
         _dataSeries.AddRange(series);
+        _useDynamicScale = useDynamicScale;
+        _timestamps = Array.Empty<uint>();
+
+        if (_useDynamicScale)
+        {
+            CalculateDynamicScale();
+        }
+        else
+        {
+            _minValue = 0f;
+            _maxValue = 100f;
+        }
+    }
+
+    /// <summary>
+    /// Sets the data with timestamps for precise time-based rendering.
+    /// </summary>
+    public void SetMultiSeriesDataWithTimestamps(string title, (string Label, float[] Data, SKColor Color)[] series, uint[] timestamps, int timeWindowMs, bool useDynamicScale = false)
+    {
+        _title = title;
+        _dataSeries.Clear();
+        _dataSeries.AddRange(series);
+        _timestamps = timestamps;
+        _timeWindowMs = timeWindowMs;
+        _maxDataPoints = timestamps.Length;
         _useDynamicScale = useDynamicScale;
 
         if (_useDynamicScale)
@@ -173,9 +201,11 @@ public sealed class TimeSeriesChart : ChartBase
 
     private void DrawDataLines(SKCanvas canvas, SKRect bounds)
     {
-        float xStep = bounds.Width / (_maxDataPoints - 1);
         float valueRange = _maxValue - _minValue;
         if (valueRange < 0.01f) valueRange = 1f;
+
+        // Use timestamp-based rendering if timestamps are available
+        bool useTimestamps = _timestamps != null && _timestamps.Length > 0;
 
         foreach (var series in _dataSeries)
         {
@@ -200,38 +230,99 @@ public sealed class TimeSeriesChart : ChartBase
             using var path = new SKPath();
             using var fillPath = new SKPath();
 
-            int startIndex = Math.Max(0, series.Data.Length - _maxDataPoints);
+            int dataLength = Math.Min(series.Data.Length, useTimestamps ? _timestamps.Length : series.Data.Length);
+            if (dataLength < 2) continue;
 
-            // Start fill path from bottom-left
-            fillPath.MoveTo(bounds.Left, bounds.Bottom);
+            int startIndex = Math.Max(0, series.Data.Length - dataLength);
 
-            bool firstPoint = true;
-            for (int i = 0; i < series.Data.Length && i < _maxDataPoints; i++)
+            // Calculate X positions based on timestamps or evenly-spaced fallback
+            if (useTimestamps && _timestamps.Length > 0)
             {
-                float value = series.Data[startIndex + i];
-                float normalizedValue = (value - _minValue) / valueRange;
-                normalizedValue = Math.Clamp(normalizedValue, 0f, 1f);
+                // Timestamp-based rendering: right edge = latest timestamp
+                uint latestTimestamp = _timestamps[_timestamps.Length - 1];
 
-                float x = bounds.Left + (i * xStep);
-                float y = bounds.Bottom - (bounds.Height * normalizedValue);
+                // Start fill path from bottom-left corner of first visible point
+                bool firstPoint = true;
+                float firstX = 0;
 
-                if (firstPoint)
+                for (int i = 0; i < dataLength; i++)
                 {
-                    path.MoveTo(x, y);
-                    fillPath.LineTo(x, y);
-                    firstPoint = false;
+                    int dataIndex = startIndex + i;
+                    int timestampIndex = Math.Max(0, _timestamps.Length - dataLength + i);
+
+                    if (timestampIndex >= _timestamps.Length) continue;
+
+                    float value = series.Data[dataIndex];
+                    float normalizedValue = (value - _minValue) / valueRange;
+                    normalizedValue = Math.Clamp(normalizedValue, 0f, 1f);
+
+                    // Calculate X position based on timestamp delta from latest
+                    uint timestamp = _timestamps[timestampIndex];
+                    long timeDelta = (long)latestTimestamp - (long)timestamp;
+
+                    // Position: right edge - (time delta / time window) * width
+                    float timeRatio = (float)timeDelta / _timeWindowMs;
+                    float x = bounds.Right - (timeRatio * bounds.Width);
+
+                    // Clamp to visible area
+                    if (x < bounds.Left - 10) continue; // Skip points far off left edge
+
+                    float y = bounds.Bottom - (bounds.Height * normalizedValue);
+
+                    if (firstPoint)
+                    {
+                        firstX = x;
+                        fillPath.MoveTo(x, bounds.Bottom);
+                        fillPath.LineTo(x, y);
+                        path.MoveTo(x, y);
+                        firstPoint = false;
+                    }
+                    else
+                    {
+                        path.LineTo(x, y);
+                        fillPath.LineTo(x, y);
+                    }
                 }
-                else
+
+                if (!firstPoint)
                 {
-                    path.LineTo(x, y);
-                    fillPath.LineTo(x, y);
+                    // Complete fill path back to bottom
+                    fillPath.LineTo(bounds.Right - ((float)((long)latestTimestamp - (long)_timestamps[_timestamps.Length - 1]) / _timeWindowMs * bounds.Width), bounds.Bottom);
+                    fillPath.Close();
                 }
             }
+            else
+            {
+                // Fallback: evenly-spaced rendering (old behavior)
+                float xStep = bounds.Width / (dataLength - 1);
+                fillPath.MoveTo(bounds.Left, bounds.Bottom);
 
-            // Complete fill path
-            int numPoints = Math.Min(series.Data.Length, _maxDataPoints);
-            fillPath.LineTo(bounds.Left + ((numPoints - 1) * xStep), bounds.Bottom);
-            fillPath.Close();
+                bool firstPoint = true;
+                for (int i = 0; i < dataLength; i++)
+                {
+                    float value = series.Data[startIndex + i];
+                    float normalizedValue = (value - _minValue) / valueRange;
+                    normalizedValue = Math.Clamp(normalizedValue, 0f, 1f);
+
+                    float x = bounds.Left + (i * xStep);
+                    float y = bounds.Bottom - (bounds.Height * normalizedValue);
+
+                    if (firstPoint)
+                    {
+                        path.MoveTo(x, y);
+                        fillPath.LineTo(x, y);
+                        firstPoint = false;
+                    }
+                    else
+                    {
+                        path.LineTo(x, y);
+                        fillPath.LineTo(x, y);
+                    }
+                }
+
+                fillPath.LineTo(bounds.Left + ((dataLength - 1) * xStep), bounds.Bottom);
+                fillPath.Close();
+            }
 
             // Draw fill first, then line on top
             canvas.DrawPath(fillPath, fillPaint);

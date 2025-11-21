@@ -104,6 +104,9 @@ _ = Task.Run(async () =>
     {
         try
         {
+            // Capture timestamp BEFORE metrics collection starts
+            var timestampMs = (uint)DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+
             stopwatch.Restart();
 
             // Collect metrics in parallel with individual timing
@@ -133,8 +136,8 @@ _ = Task.Run(async () =>
                     networkSw.ElapsedMilliseconds, diskSw.ElapsedMilliseconds);
             }
 
-            // Post to pipeline
-            var postSuccess = multiplexService.PostCpuGpuMetrics(cpuTask.Result, gpuTask.Result)
+            // Post to pipeline with timestamp captured before collection
+            var postSuccess = multiplexService.PostCpuGpuMetrics(cpuTask.Result, gpuTask.Result, timestampMs)
                             & multiplexService.PostNetworkMetrics(networkTask.Result.RxBytes, networkTask.Result.TxBytes, collectionTimeMs)
                             & multiplexService.PostDiskMetrics(diskTask.Result.ReadBytes, diskTask.Result.WriteBytes, diskTask.Result.ReadIops, diskTask.Result.WriteIops);
 
