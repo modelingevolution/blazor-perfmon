@@ -13,7 +13,7 @@ namespace ModelingEvolution.BlazorPerfMon.Server.Collectors;
 /// then sets up continuous monitoring for each container using IProgress.
 /// Collect() returns cached data without blocking.
 /// </summary>
-public sealed class DockerCollector : IMetricsCollector<DockerContainerMetric[]>, IDisposable
+internal sealed class DockerCollector : IMetricsCollector<DockerContainerMetric[]>, IDisposable
 {
     private readonly ILogger<DockerCollector>? _logger;
     private readonly DockerClient? _dockerClient;
@@ -22,6 +22,10 @@ public sealed class DockerCollector : IMetricsCollector<DockerContainerMetric[]>
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _monitoringCancellations = new();
     private readonly CancellationTokenSource _cts = new();
     private readonly Task? _discoveryTask;
+
+    // Cached array to avoid ToArray() allocations on every Collect() call
+    private volatile DockerContainerMetric[] _cachedArray = Array.Empty<DockerContainerMetric>();
+    private volatile bool _arrayNeedsUpdate = false;
 
     public DockerCollector(ILogger<DockerCollector>? logger = null)
     {
@@ -127,6 +131,7 @@ public sealed class DockerCollector : IMetricsCollector<DockerContainerMetric[]>
                     cts.Dispose();
                     _monitoringCancellations.TryRemove(containerId, out _);
                     _cachedMetrics.TryRemove(containerId, out _);
+                    _arrayNeedsUpdate = true; // Mark array for update
 
                     _logger?.LogInformation("Stopped monitoring container: {Id}", containerId[..12]);
                 }
@@ -168,6 +173,7 @@ public sealed class DockerCollector : IMetricsCollector<DockerContainerMetric[]>
                     };
 
                     _cachedMetrics[containerId] = metric;
+                    _arrayNeedsUpdate = true; // Mark array for update
                 }
                 catch (Exception ex)
                 {
@@ -209,10 +215,17 @@ public sealed class DockerCollector : IMetricsCollector<DockerContainerMetric[]>
 
     /// <summary>
     /// Returns cached metrics without blocking.
+    /// Rebuilds array only when containers are added/removed, not on every call.
     /// </summary>
     public DockerContainerMetric[] Collect()
     {
-        return _cachedMetrics.Values.ToArray();
+        // Only rebuild array when containers change, avoiding ToArray() allocation on every call
+        if (_arrayNeedsUpdate)
+        {
+            _cachedArray = _cachedMetrics.Values.ToArray();
+            _arrayNeedsUpdate = false;
+        }
+        return _cachedArray;
     }
 
     public void Dispose()

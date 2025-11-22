@@ -21,6 +21,7 @@ public sealed class MetricsStore
     /// Buffer capacity is intervals + 1 to properly represent the time range.
     /// Example: 120 intervals × 500ms = 60 seconds requires 121 sample points.
     /// </summary>
+    /// <param name="intervals">The number of time intervals to store in the buffer</param>
     public MetricsStore(int intervals)
     {
         // Buffer needs intervals + 1 samples to represent the full time range
@@ -30,6 +31,7 @@ public sealed class MetricsStore
     /// <summary>
     /// Adds a new sample to the buffer. Thread-safe.
     /// </summary>
+    /// <param name="sample">The metric sample to add</param>
     public void AddSample(MetricSample sample)
     {
         _buffer = _buffer.Add(sample);

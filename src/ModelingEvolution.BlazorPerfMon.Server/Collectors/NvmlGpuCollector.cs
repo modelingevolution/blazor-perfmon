@@ -10,7 +10,7 @@ namespace ModelingEvolution.BlazorPerfMon.Server.Collectors;
 /// Supports Turing, Ampere, Ada Lovelace architectures.
 /// Uses timeout (1/3 of tick interval) to prevent slow idle GPU queries.
 /// </summary>
-public sealed class NvmlGpuCollector : IGpuCollector, IDisposable
+internal sealed class NvmlGpuCollector : IGpuCollector, IDisposable
 {
     private readonly ILogger<NvmlGpuCollector> _logger;
     private readonly int _timeoutMs;

@@ -7,12 +7,17 @@ namespace ModelingEvolution.BlazorPerfMon.Server.Collectors;
 /// Collects disk I/O statistics from /proc/diskstats.
 /// Returns delta values (read/write bytes and IOPS) since last collection for multiple disks.
 /// </summary>
-public sealed class DiskCollector : IMetricsCollector<DiskMetric[]>
+internal sealed class DiskCollector : IMetricsCollector<DiskMetric[]>
 {
     private const string ProcDiskStatsPath = "/proc/diskstats";
     private const int SectorSize = 512; // Standard sector size in bytes
 
     private readonly string[] _diskDevices;
+
+    // Reusable arrays to avoid ToArray() allocations
+    private readonly DiskMetric[] _metrics;
+    private readonly DiskMetric[] _errorMetrics;
+
     private readonly Dictionary<string, DiskState> _prevStates = new();
     private bool _isFirstRead = true;
 
@@ -33,6 +38,23 @@ public sealed class DiskCollector : IMetricsCollector<DiskMetric[]>
             // Default to sda if no config
             _diskDevices = new[] { "sda" };
         }
+
+        // Pre-allocate arrays
+        _metrics = new DiskMetric[_diskDevices.Length];
+        _errorMetrics = new DiskMetric[_diskDevices.Length];
+
+        // Initialize error metrics once
+        for (int i = 0; i < _diskDevices.Length; i++)
+        {
+            _errorMetrics[i] = new DiskMetric
+            {
+                Identifier = _diskDevices[i],
+                ReadBytes = 0,
+                WriteBytes = 0,
+                ReadIops = 0,
+                WriteIops = 0
+            };
+        }
     }
 
     /// <summary>
@@ -44,10 +66,11 @@ public sealed class DiskCollector : IMetricsCollector<DiskMetric[]>
         try
         {
             var lines = File.ReadAllLines(ProcDiskStatsPath);
-            var metrics = new List<DiskMetric>();
 
-            foreach (var diskDevice in _diskDevices)
+            for (int i = 0; i < _diskDevices.Length; i++)
             {
+                var diskDevice = _diskDevices[i];
+
                 // Find the disk device line
                 // Format: major minor name reads_completed ... sectors_read ... writes_completed ... sectors_written ...
                 string? diskLine = lines.FirstOrDefault(l =>
@@ -59,14 +82,14 @@ public sealed class DiskCollector : IMetricsCollector<DiskMetric[]>
                 if (diskLine == null)
                 {
                     // Device not found, add zero metrics
-                    metrics.Add(new DiskMetric
+                    _metrics[i] = new DiskMetric
                     {
                         Identifier = diskDevice,
                         ReadBytes = 0,
                         WriteBytes = 0,
                         ReadIops = 0,
                         WriteIops = 0
-                    });
+                    };
                     continue;
                 }
 
@@ -75,14 +98,14 @@ public sealed class DiskCollector : IMetricsCollector<DiskMetric[]>
 
                 if (parts.Length < 14)
                 {
-                    metrics.Add(new DiskMetric
+                    _metrics[i] = new DiskMetric
                     {
                         Identifier = diskDevice,
                         ReadBytes = 0,
                         WriteBytes = 0,
                         ReadIops = 0,
                         WriteIops = 0
-                    });
+                    };
                     continue;
                 }
 
@@ -96,28 +119,28 @@ public sealed class DiskCollector : IMetricsCollector<DiskMetric[]>
                     !uint.TryParse(parts[7], out uint writesCompleted) ||
                     !ulong.TryParse(parts[9], out ulong sectorsWritten))
                 {
-                    metrics.Add(new DiskMetric
+                    _metrics[i] = new DiskMetric
                     {
                         Identifier = diskDevice,
                         ReadBytes = 0,
                         WriteBytes = 0,
                         ReadIops = 0,
                         WriteIops = 0
-                    });
+                    };
                     continue;
                 }
 
                 if (_isFirstRead || !_prevStates.ContainsKey(diskDevice))
                 {
                     _prevStates[diskDevice] = new DiskState(sectorsRead, sectorsWritten, readsCompleted, writesCompleted);
-                    metrics.Add(new DiskMetric
+                    _metrics[i] = new DiskMetric
                     {
                         Identifier = diskDevice,
                         ReadBytes = 0,
                         WriteBytes = 0,
                         ReadIops = 0,
                         WriteIops = 0
-                    });
+                    };
                     continue;
                 }
 
@@ -142,31 +165,24 @@ public sealed class DiskCollector : IMetricsCollector<DiskMetric[]>
 
                 _prevStates[diskDevice] = new DiskState(sectorsRead, sectorsWritten, readsCompleted, writesCompleted);
 
-                metrics.Add(new DiskMetric
+                _metrics[i] = new DiskMetric
                 {
                     Identifier = diskDevice,
                     ReadBytes = readBytesDelta,
                     WriteBytes = writeBytesDelta,
                     ReadIops = readIopsDelta,
                     WriteIops = writeIopsDelta
-                });
+                };
             }
 
             _isFirstRead = false;
-            return metrics.ToArray();
+            return _metrics;
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error reading disk stats: {ex.Message}");
-            // Return zero metrics for all disks
-            return _diskDevices.Select(device => new DiskMetric
-            {
-                Identifier = device,
-                ReadBytes = 0,
-                WriteBytes = 0,
-                ReadIops = 0,
-                WriteIops = 0
-            }).ToArray();
+            // Return pre-allocated zero metrics for all disks
+            return _errorMetrics;
         }
     }
 }

@@ -7,10 +7,14 @@ namespace ModelingEvolution.BlazorPerfMon.Server.Collectors;
 /// Collects network interface statistics from /proc/net/dev.
 /// Returns delta bytes (Rx/Tx) since last collection for multiple interfaces.
 /// </summary>
-public sealed class NetworkCollector : IMetricsCollector<NetworkMetric[]>
+internal sealed class NetworkCollector : IMetricsCollector<NetworkMetric[]>
 {
     private const string ProcNetDevPath = "/proc/net/dev";
     private readonly string[] _interfaceNames;
+
+    // Reusable array to avoid ToArray() allocations
+    private readonly NetworkMetric[] _metrics;
+    private readonly NetworkMetric[] _errorMetrics;
 
     private readonly Dictionary<string, (ulong RxBytes, ulong TxBytes)> _prevValues = new();
     private bool _isFirstRead = true;
@@ -26,6 +30,21 @@ public sealed class NetworkCollector : IMetricsCollector<NetworkMetric[]>
             // Default to eth0 if no config
             _interfaceNames = new[] { "eth0" };
         }
+
+        // Pre-allocate arrays
+        _metrics = new NetworkMetric[_interfaceNames.Length];
+        _errorMetrics = new NetworkMetric[_interfaceNames.Length];
+
+        // Initialize error metrics once
+        for (int i = 0; i < _interfaceNames.Length; i++)
+        {
+            _errorMetrics[i] = new NetworkMetric
+            {
+                Identifier = _interfaceNames[i],
+                RxBytes = 0,
+                TxBytes = 0
+            };
+        }
     }
 
     /// <summary>
@@ -37,10 +56,11 @@ public sealed class NetworkCollector : IMetricsCollector<NetworkMetric[]>
         try
         {
             var lines = File.ReadAllLines(ProcNetDevPath);
-            var metrics = new List<NetworkMetric>();
 
-            foreach (var interfaceName in _interfaceNames)
+            for (int i = 0; i < _interfaceNames.Length; i++)
             {
+                var interfaceName = _interfaceNames[i];
+
                 // Find the network interface line
                 // Format: interface: rxBytes rxPackets ... txBytes txPackets ...
                 string? interfaceLine = lines.FirstOrDefault(l => l.Trim().StartsWith(interfaceName + ":"));
@@ -48,12 +68,12 @@ public sealed class NetworkCollector : IMetricsCollector<NetworkMetric[]>
                 if (interfaceLine == null)
                 {
                     // Interface not found, add zero metrics
-                    metrics.Add(new NetworkMetric
+                    _metrics[i] = new NetworkMetric
                     {
                         Identifier = interfaceName,
                         RxBytes = 0,
                         TxBytes = 0
-                    });
+                    };
                     continue;
                 }
 
@@ -63,12 +83,12 @@ public sealed class NetworkCollector : IMetricsCollector<NetworkMetric[]>
 
                 if (parts.Length < 10)
                 {
-                    metrics.Add(new NetworkMetric
+                    _metrics[i] = new NetworkMetric
                     {
                         Identifier = interfaceName,
                         RxBytes = 0,
                         TxBytes = 0
-                    });
+                    };
                     continue;
                 }
 
@@ -76,24 +96,24 @@ public sealed class NetworkCollector : IMetricsCollector<NetworkMetric[]>
                 if (!ulong.TryParse(parts[1], out ulong currentRx) ||
                     !ulong.TryParse(parts[9], out ulong currentTx))
                 {
-                    metrics.Add(new NetworkMetric
+                    _metrics[i] = new NetworkMetric
                     {
                         Identifier = interfaceName,
                         RxBytes = 0,
                         TxBytes = 0
-                    });
+                    };
                     continue;
                 }
 
                 if (_isFirstRead || !_prevValues.ContainsKey(interfaceName))
                 {
                     _prevValues[interfaceName] = (currentRx, currentTx);
-                    metrics.Add(new NetworkMetric
+                    _metrics[i] = new NetworkMetric
                     {
                         Identifier = interfaceName,
                         RxBytes = 0,
                         TxBytes = 0
-                    });
+                    };
                     continue;
                 }
 
@@ -109,27 +129,22 @@ public sealed class NetworkCollector : IMetricsCollector<NetworkMetric[]>
 
                 _prevValues[interfaceName] = (currentRx, currentTx);
 
-                metrics.Add(new NetworkMetric
+                _metrics[i] = new NetworkMetric
                 {
                     Identifier = interfaceName,
                     RxBytes = rxDelta,
                     TxBytes = txDelta
-                });
+                };
             }
 
             _isFirstRead = false;
-            return metrics.ToArray();
+            return _metrics;
         }
         catch (Exception ex)
         {
             Console.WriteLine($"Error reading network stats: {ex.Message}");
-            // Return zero metrics for all interfaces
-            return _interfaceNames.Select(name => new NetworkMetric
-            {
-                Identifier = name,
-                RxBytes = 0,
-                TxBytes = 0
-            }).ToArray();
+            // Return pre-allocated zero metrics for all interfaces
+            return _errorMetrics;
         }
     }
 }

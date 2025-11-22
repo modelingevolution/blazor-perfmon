@@ -7,7 +7,7 @@ namespace ModelingEvolution.BlazorPerfMon.Server.Collectors;
 /// Uses delta calculation between reads to determine CPU utilization.
 /// Auto-detects number of cores on first read.
 /// </summary>
-public sealed class CpuCollector : IMetricsCollector<float[]>
+internal sealed class CpuCollector : IMetricsCollector<float[]>
 {
     private const string ProcStatPath = "/proc/stat";
 

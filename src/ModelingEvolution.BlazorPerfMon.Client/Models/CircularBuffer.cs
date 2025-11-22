@@ -6,7 +6,7 @@ namespace ModelingEvolution.BlazorPerfMon.Client.Models;
 /// Thread-safe for single reader/writer scenarios.
 /// </summary>
 /// <typeparam name="T">Type of data stored in buffer</typeparam>
-public sealed class CircularBuffer<T>
+internal sealed class CircularBuffer<T>
 {
     private readonly T[] _buffer;
     private int _writeIndex;

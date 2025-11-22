@@ -38,7 +38,8 @@
       "Bash(xargs:*)",
       "Bash(timeout 10 tail:*)",
       "WebFetch(domain:raw.githubusercontent.com)",
-      "Bash(timeout 15 dotnet run:*)"
+      "Bash(timeout 15 dotnet run:*)",
+      "Bash(./release.sh:*)"
     ],
     "deny": [],
     "ask": []

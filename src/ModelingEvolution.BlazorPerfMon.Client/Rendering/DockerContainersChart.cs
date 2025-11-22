@@ -14,7 +14,7 @@ namespace ModelingEvolution.BlazorPerfMon.Client.Rendering;
 /// Scale: max(all containers) + 10% OR system RAM (whichever is lower)
 /// Max memory can only grow on UI
 /// </summary>
-public sealed class DockerContainersChart : IChart
+internal sealed class DockerContainersChart : IChart
 {
     private ulong _systemRam = 0;
     private ulong _maxMemoryBytes = 0;
@@ -51,6 +51,11 @@ public sealed class DockerContainersChart : IChart
             return;
         }
 
+        // Draw title at the top
+        const float titleHeight = 30f;
+        var titleText = $"Docker containers: {containers.Length}";
+        canvas.DrawText(titleText, 5, titleHeight - 5, Brushes.Text18Bold);
+
         // Calculate max memory: max(all containers) + 10% OR system RAM (whichever is lower)
         var currentMax = containers.Max(c => c.MemoryUsageBytes);
         var calculatedMax = (ulong)(currentMax * 1.1);
@@ -68,17 +73,19 @@ public sealed class DockerContainersChart : IChart
         const float barSpacing = 4f;
         const float barMaxHeight = 40f; // Same as CPU bars
 
-        float barHeight = Math.Min((size.Height - 10) / containers.Length - barSpacing, barMaxHeight);
+        // Adjust available height for title
+        float availableHeight = size.Height - titleHeight;
+        float barHeight = Math.Min((availableHeight - 10) / containers.Length - barSpacing, barMaxHeight);
 
         // Calculate how many containers can fit fully visible
-        int visibleContainers = (int)((size.Height - 10) / (barHeight + barSpacing));
+        int visibleContainers = (int)((availableHeight - 10) / (barHeight + barSpacing));
         visibleContainers = Math.Min(visibleContainers, containers.Length);
 
-        // Render only fully visible containers
+        // Render only fully visible containers (start below title)
         for (int i = 0; i < visibleContainers; i++)
         {
             var container = containers[i];
-            var y = 5 + i * (barHeight + barSpacing);
+            var y = titleHeight + 5 + i * (barHeight + barSpacing);
             RenderContainer(canvas, container, y, barHeight, size.Width);
         }
     }
@@ -113,80 +120,31 @@ public sealed class DockerContainersChart : IChart
         var (minRam, maxRam) = _ramMinMax[container.ContainerId];
 
         // Draw container name (left) - larger font (16pt)
-        using var labelPaint = new SKPaint
-        {
-            Color = ChartColors.White,
-            TextSize = 16,
-            IsAntialias = true,
-            Typeface = SKTypeface.FromFamilyName("monospace", SKFontStyle.Normal)
-        };
-        canvas.DrawText(displayName, padding, y + (barHeight / 2) + 6, labelPaint);
+        canvas.DrawText(displayName, padding, y + (barHeight / 2) + 6, Brushes.Text16);
 
         // Draw memory bar background
-        using var bgPaint = new SKPaint
-        {
-            Color = ChartColors.BarBackground,
-            Style = SKPaintStyle.Fill,
-            IsAntialias = true
-        };
-        canvas.DrawRect(barX, y, barWidth, barHeight, bgPaint);
+        canvas.DrawRect(barX, y, barWidth, barHeight, Brushes.BarBackground);
 
         // Draw memory bar foreground (green - same as CPU bars)
         var memoryRatio = _maxMemoryBytes > 0 ? (float)container.MemoryUsageBytes / _maxMemoryBytes : 0f;
         var filledWidth = barWidth * memoryRatio;
-
-        using var fillPaint = new SKPaint
-        {
-            Color = ChartColors.Green,
-            Style = SKPaintStyle.Fill,
-            IsAntialias = true
-        };
-        canvas.DrawRect(barX, y, filledWidth, barHeight, fillPaint);
+        canvas.DrawRect(barX, y, filledWidth, barHeight, Brushes.Green);
 
         // Draw dotted horizontal lines for min/max RAM
-
-        // Min RAM line (gray)
-        using var minRamPaint = new SKPaint
-        {
-            Color = ChartColors.GridLines,
-            StrokeWidth = 3f,
-            Style = SKPaintStyle.Stroke,
-            IsAntialias = true,
-            PathEffect = SKPathEffect.CreateDash(new float[] { 3, 3 }, 0)
-        };
-
         var minRamRatio = _maxMemoryBytes > 0 ? (float)minRam / _maxMemoryBytes : 0f;
         var minRamX = barX + (barWidth * minRamRatio);
-        canvas.DrawLine(minRamX, y, minRamX, y + barHeight, minRamPaint);
-
-        // Max RAM line (orange for visibility)
-        using var maxRamPaint = new SKPaint
-        {
-            Color = ChartColors.Orange,
-            StrokeWidth = 3f,
-            Style = SKPaintStyle.Stroke,
-            IsAntialias = true,
-            PathEffect = SKPathEffect.CreateDash(new float[] { 3, 3 }, 0)
-        };
+        canvas.DrawLine(minRamX, y, minRamX, y + barHeight, Brushes.GridStroke);
 
         var maxRamRatio = _maxMemoryBytes > 0 ? (float)maxRam / _maxMemoryBytes : 0f;
         var maxRamX = barX + (barWidth * maxRamRatio);
-        canvas.DrawLine(maxRamX, y, maxRamX, y + barHeight, maxRamPaint);
+        canvas.DrawLine(maxRamX, y, maxRamX, y + barHeight, Brushes.OrangeDashedStroke);
 
         // Draw CPU % label in the middle of the bar
         var cpuNormalized = Math.Min(container.CpuPercent, 100f);
-        var cpuText = $"{cpuNormalized:F1}%";
+        var cpuText = $"CPU: {cpuNormalized:F1}%";
 
         // Use black text when memory > 50% for better contrast on green memory bar background
-        var cpuTextColor = memoryRatio > 0.5f ? SKColors.Black : ChartColors.White;
-
-        using var cpuTextPaint = new SKPaint
-        {
-            Color = cpuTextColor,
-            TextSize = 18,  // Bigger for better visibility
-            IsAntialias = true,
-            Typeface = SKTypeface.FromFamilyName("monospace", SKFontStyle.Bold)
-        };
+        var cpuTextPaint = memoryRatio > 0.5f ? Brushes.TextBlack18Bold : Brushes.Text18Bold;
 
         // Measure text to center it
         var textBounds = new SKRect();
@@ -198,41 +156,22 @@ public sealed class DockerContainersChart : IChart
         // CPU vertical line (light red, wider)
         var cpuRatio = cpuNormalized / 100f;
         var cpuLineX = barX + (barWidth * cpuRatio);
-
-        using var cpuLinePaint = new SKPaint
-        {
-            Color = ChartColors.LightRed,
-            StrokeWidth = 5f, // Much wider
-            Style = SKPaintStyle.Stroke,
-            IsAntialias = true
-        };
-        canvas.DrawLine(cpuLineX, y, cpuLineX, y + barHeight, cpuLinePaint);
+        canvas.DrawLine(cpuLineX, y, cpuLineX, y + barHeight, Brushes.LightRedStroke);
 
         // Draw memory value (right) - larger font
         Bytes memoryBytes = (long)container.MemoryUsageBytes;
         var memoryText = memoryBytes.FormatFixed();
-
-        using var valuePaint = new SKPaint
-        {
-            Color = ChartColors.White,
-            TextSize = 16,
-            IsAntialias = true,
-            Typeface = SKTypeface.FromFamilyName("monospace", SKFontStyle.Normal)
-        };
-
         var valueX = barX + barWidth + padding;
-        canvas.DrawText(memoryText, valueX, y + (barHeight / 2) + 6, valuePaint);
+        canvas.DrawText(memoryText, valueX, y + (barHeight / 2) + 6, Brushes.Text16);
     }
 
     private void DrawNoContainers(SKCanvas canvas, SKSize size)
     {
-        using var paint = new SKPaint
-        {
-            Color = SKColors.Gray,
-            TextSize = 14,
-            IsAntialias = true,
-            TextAlign = SKTextAlign.Center
-        };
-        canvas.DrawText("No Docker containers running", size.Width / 2, size.Height / 2, paint);
+        canvas.DrawText("No Docker containers running", size.Width / 2, size.Height / 2, Brushes.TextGray14Center);
+    }
+
+    public void Dispose()
+    {
+        // No disposable resources
     }
 }

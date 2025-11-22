@@ -5,7 +5,31 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <OutputType>Library</OutputType>
+    <IsPackable>true</IsPackable>
+
+    <!-- NuGet Package Metadata -->
+    <PackageId>ModelingEvolution.PerformanceMonitor.Server</PackageId>
+    <Title>ModelingEvolution Performance Monitor - Server</Title>
+    <Description>Server-side metrics collection library for real-time performance monitoring on Linux systems. Includes collectors for CPU, GPU (NVIDIA), Network, Disk I/O, Docker containers, and RAM with TPL Dataflow pipeline and WebSocket streaming via MessagePack.</Description>
+    <Authors>ModelingEvolution Team</Authors>
+    <Copyright>Copyright © ModelingEvolution Team</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageTags>Performance;Monitoring;Linux;Metrics;CPU;GPU;NVIDIA;Network;Disk;Docker;TPL-Dataflow;WebSocket;MessagePack;System-Monitoring</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/modelingevolution/blazor-perfmon</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <GenerateDocumentationFile>True</GenerateDocumentationFile>
+    <GeneratePackageOnBuild>False</GeneratePackageOnBuild>
+    <IncludeSymbols>True</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="..\..\README.md">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+  </ItemGroup>
 
   <ItemGroup>
     <PackageReference Include="Docker.DotNet" Version="3.125.15" />

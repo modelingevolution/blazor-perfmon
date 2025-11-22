@@ -7,7 +7,7 @@ namespace ModelingEvolution.BlazorPerfMon.Client.Rendering;
 /// <summary>
 /// Time series chart for displaying compute load (CPU Avg, GPU, RAM).
 /// </summary>
-public sealed class ComputeLoadChart : IChart
+internal sealed class ComputeLoadChart : IChart
 {
     private readonly int _timeWindowMs;
     private readonly SampleAccessor<float> _cpuAvgAccessor;
@@ -17,6 +17,11 @@ public sealed class ComputeLoadChart : IChart
     private readonly TimeSeriesChart _renderer;
     private ImmutableCircularBuffer<MetricSample> _buffer;
 
+    /// <summary>
+    /// Initializes a new instance of the ComputeLoadChart class.
+    /// </summary>
+    /// <param name="timeWindowMs">The time window in milliseconds for historical data display</param>
+    /// <param name="timestampAccessor">Accessor for metric timestamps</param>
     public ComputeLoadChart(int timeWindowMs, SampleAccessor<uint> timestampAccessor)
     {
         _timeWindowMs = timeWindowMs;
@@ -71,5 +76,10 @@ public sealed class ComputeLoadChart : IChart
         _renderer.Location = SKPoint.Empty;
         _renderer.Size = size;
         _renderer.Render(canvas);
+    }
+
+    public void Dispose()
+    {
+        _renderer.Dispose();
     }
 }

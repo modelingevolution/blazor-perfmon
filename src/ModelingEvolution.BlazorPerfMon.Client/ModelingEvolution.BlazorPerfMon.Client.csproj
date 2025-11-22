@@ -4,12 +4,34 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+
+    <!-- NuGet Package Metadata -->
+    <PackageId>ModelingEvolution.PerformanceMonitor.Client</PackageId>
+    <Title>ModelingEvolution Performance Monitor - Client</Title>
+    <Description>Blazor WebAssembly client library for real-time performance monitoring with hardware-accelerated SkiaSharp rendering. Features include CPU, GPU, Network, Disk, Docker container, and RAM visualization with bar charts and time-series graphs.</Description>
+    <Authors>ModelingEvolution Team</Authors>
+    <Copyright>Copyright © ModelingEvolution Team</Copyright>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageTags>Blazor;WebAssembly;SkiaSharp;Performance;Monitoring;Charts;Visualization;Real-time;WASM;System-Monitoring</PackageTags>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <RepositoryUrl>https://github.com/modelingevolution/blazor-perfmon</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <GenerateDocumentationFile>True</GenerateDocumentationFile>
+    <GeneratePackageOnBuild>False</GeneratePackageOnBuild>
+    <IncludeSymbols>True</IncludeSymbols>
+    <SymbolPackageFormat>snupkg</SymbolPackageFormat>
   </PropertyGroup>
 
   <PropertyGroup Condition="'$(Configuration)' == 'Debug'">
     <DefineConstants>$(DefineConstants);DEBUG</DefineConstants>
   </PropertyGroup>
 
+  <ItemGroup>
+    <None Include="..\..\README.md">
+      <Pack>True</Pack>
+      <PackagePath>\</PackagePath>
+    </None>
+  </ItemGroup>
 
   <ItemGroup>
     <SupportedPlatform Include="browser" />

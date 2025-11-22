@@ -39,12 +39,23 @@ public readonly record struct MetricSource : IParsable<MetricSource>
     [Key(3)]
     public uint ColSpan { get; init; }
 
+    /// <summary>
+    /// Converts the MetricSource to its string representation.
+    /// </summary>
+    /// <returns>A string in the format "Name/Count", "Name:Identifier/Count", or with optional "|col-span:N" suffix</returns>
     public override string ToString()
     {
         var baseFormat = Identifier is null ? $"{Name}/{Count}" : $"{Name}:{Identifier}/{Count}";
         return ColSpan > 1 ? $"{baseFormat}|col-span:{ColSpan}" : baseFormat;
     }
 
+    /// <summary>
+    /// Parses a string representation into a MetricSource.
+    /// </summary>
+    /// <param name="s">The string to parse</param>
+    /// <param name="provider">An optional format provider (not used)</param>
+    /// <returns>A MetricSource parsed from the string</returns>
+    /// <exception cref="FormatException">Thrown when the string format is invalid</exception>
     public static MetricSource Parse(string s, IFormatProvider? provider)
     {
         if (TryParse(s, provider, out var result))
@@ -53,6 +64,13 @@ public readonly record struct MetricSource : IParsable<MetricSource>
         throw new FormatException($"Invalid MetricSource format: {s}. Expected format: 'Name', 'Name/Count', 'Name:Identifier', 'Name:Identifier/Count', or append '|col-span:N' (1-12)");
     }
 
+    /// <summary>
+    /// Attempts to parse a string representation into a MetricSource.
+    /// </summary>
+    /// <param name="s">The string to parse</param>
+    /// <param name="provider">An optional format provider (not used)</param>
+    /// <param name="result">When this method returns, contains the parsed MetricSource if successful, or default if parsing failed</param>
+    /// <returns>True if parsing succeeded; otherwise, false</returns>
     public static bool TryParse(string? s, IFormatProvider? provider, out MetricSource result)
     {
         result = default;

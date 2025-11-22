@@ -23,6 +23,12 @@ public static class ChartColors
     public static readonly SKColor White = SKColors.White;                     // Bright text, labels
 
     // Semi-transparent variants
+    /// <summary>
+    /// Creates a new color with the specified alpha channel while preserving RGB values.
+    /// </summary>
+    /// <param name="color">The base color</param>
+    /// <param name="alpha">The alpha value (0-255, where 0 is fully transparent and 255 is fully opaque)</param>
+    /// <returns>A new SKColor with the specified alpha value</returns>
     public static SKColor WithAlpha(this SKColor color, byte alpha)
     {
         return new SKColor(color.Red, color.Green, color.Blue, alpha);

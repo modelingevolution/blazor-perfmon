@@ -7,7 +7,11 @@ namespace ModelingEvolution.BlazorPerfMon.Client.Rendering;
 /// </summary>
 public sealed class TimeSeriesChart : ChartBase
 {
-    private readonly SKPaint _axisPaint;
+    private readonly SKPaint _linePaint;
+    private readonly SKPaint _fillPaint;
+    private readonly SKPath _path;
+    private readonly SKPath _fillPath;
+
     private TimeSeriesF[] _dataSeries = Array.Empty<TimeSeriesF>();
     private IEnumerable<uint> _timestamps = Enumerable.Empty<uint>();
     private int _timestampCount = 0;
@@ -22,13 +26,22 @@ public sealed class TimeSeriesChart : ChartBase
 
     public TimeSeriesChart()
     {
-        _axisPaint = new SKPaint
+        // Reusable paint/path objects to avoid allocation in hot rendering path
+        _linePaint = new SKPaint
         {
-            Color = new SKColor(150, 150, 150),
-            StrokeWidth = 2f,
-            IsAntialias = false,
-            Style = SKPaintStyle.Stroke
+            IsAntialias = true,
+            Style = SKPaintStyle.Stroke,
+            StrokeWidth = 2f
         };
+
+        _fillPaint = new SKPaint
+        {
+            IsAntialias = true,
+            Style = SKPaintStyle.Fill
+        };
+
+        _path = new SKPath();
+        _fillPath = new SKPath();
     }
 
     /// <summary>
@@ -138,10 +151,10 @@ public sealed class TimeSeriesChart : ChartBase
     private void DrawAxes(SKCanvas canvas, SKRect bounds)
     {
         // Y-axis
-        canvas.DrawLine(bounds.Left, bounds.Top, bounds.Left, bounds.Bottom, _axisPaint);
+        canvas.DrawLine(bounds.Left, bounds.Top, bounds.Left, bounds.Bottom, Brushes.AxisStroke);
 
         // X-axis
-        canvas.DrawLine(bounds.Left, bounds.Bottom, bounds.Right, bounds.Bottom, _axisPaint);
+        canvas.DrawLine(bounds.Left, bounds.Bottom, bounds.Right, bounds.Bottom, Brushes.AxisStroke);
     }
 
     private void DrawGrid(SKCanvas canvas, SKRect bounds)
@@ -174,23 +187,11 @@ public sealed class TimeSeriesChart : ChartBase
             if (series.Count < 2)
                 continue;
 
-            using var linePaint = new SKPaint
-            {
-                Color = series.Color,
-                IsAntialias = true,
-                Style = SKPaintStyle.Stroke,
-                StrokeWidth = 2f
-            };
-
-            using var fillPaint = new SKPaint
-            {
-                Color = new SKColor(series.Color.Red, series.Color.Green, series.Color.Blue, 40),
-                IsAntialias = true,
-                Style = SKPaintStyle.Fill
-            };
-
-            using var path = new SKPath();
-            using var fillPath = new SKPath();
+            // Reuse paint/path objects, just update colors and reset paths
+            _linePaint.Color = series.Color;
+            _fillPaint.Color = new SKColor(series.Color.Red, series.Color.Green, series.Color.Blue, 40);
+            _path.Reset();
+            _fillPath.Reset();
 
             bool firstPoint = true;
             float prevX = 0, prevY = 0;
@@ -247,23 +248,23 @@ public sealed class TimeSeriesChart : ChartBase
 #if DEBUG
                         Console.WriteLine($"[{series.Label}] Right edge interpolation: prevX={prevX:F1} x={x:F1} t={t:F3} interpY={interpY:F1}");
 #endif
-                        path.LineTo(bounds.Right, interpY);
-                        fillPath.LineTo(bounds.Right, interpY);
+                        _path.LineTo(bounds.Right, interpY);
+                        _fillPath.LineTo(bounds.Right, interpY);
 
                         // Complete fill and break
-                        fillPath.LineTo(bounds.Right, bounds.Bottom);
-                        fillPath.Close();
-                        canvas.DrawPath(fillPath, fillPaint);
-                        canvas.DrawPath(path, linePaint);
+                        _fillPath.LineTo(bounds.Right, bounds.Bottom);
+                        _fillPath.Close();
+                        canvas.DrawPath(_fillPath, _fillPaint);
+                        canvas.DrawPath(_path, _linePaint);
                         goto NextSeries; // Break to outer foreach
                     }
                     // No interpolation needed, complete what we have
                     if (!firstPoint)
                     {
-                        fillPath.LineTo(prevX, bounds.Bottom);
-                        fillPath.Close();
-                        canvas.DrawPath(fillPath, fillPaint);
-                        canvas.DrawPath(path, linePaint);
+                        _fillPath.LineTo(prevX, bounds.Bottom);
+                        _fillPath.Close();
+                        canvas.DrawPath(_fillPath, _fillPaint);
+                        canvas.DrawPath(_path, _linePaint);
                         goto NextSeries;
                     }
                     break;
@@ -282,20 +283,20 @@ public sealed class TimeSeriesChart : ChartBase
                         Console.WriteLine($"[{series.Label}] Left edge interpolation: prevX={prevX:F1} x={x:F1} t={t:F3} interpY={interpY:F1}");
 #endif
                         // Start path at left edge with interpolated value
-                        fillPath.MoveTo(bounds.Left, bounds.Bottom);
-                        fillPath.LineTo(bounds.Left, interpY);
-                        path.MoveTo(bounds.Left, interpY);
+                        _fillPath.MoveTo(bounds.Left, bounds.Bottom);
+                        _fillPath.LineTo(bounds.Left, interpY);
+                        _path.MoveTo(bounds.Left, interpY);
                         // Draw to current visible point
-                        path.LineTo(x, y);
-                        fillPath.LineTo(x, y);
+                        _path.LineTo(x, y);
+                        _fillPath.LineTo(x, y);
                     }
                     else
                     {
                         // No previous point or previous was also visible
                         // Start directly at current point
-                        fillPath.MoveTo(x, bounds.Bottom);
-                        fillPath.LineTo(x, y);
-                        path.MoveTo(x, y);
+                        _fillPath.MoveTo(x, bounds.Bottom);
+                        _fillPath.LineTo(x, y);
+                        _path.MoveTo(x, y);
 #if DEBUG
                         Console.WriteLine($"[{series.Label}] First visible point (no interpolation): x={x:F1} y={y:F1}");
 #endif
@@ -304,8 +305,8 @@ public sealed class TimeSeriesChart : ChartBase
                 }
                 else
                 {
-                    path.LineTo(x, y);
-                    fillPath.LineTo(x, y);
+                    _path.LineTo(x, y);
+                    _fillPath.LineTo(x, y);
                 }
 
                 prevX = x;
@@ -319,21 +320,21 @@ public sealed class TimeSeriesChart : ChartBase
                 // Extend to right edge if last data point is before current time
                 if (prevValid && prevX < bounds.Right)
                 {
-                    path.LineTo(bounds.Right, prevY);
-                    fillPath.LineTo(bounds.Right, prevY);
+                    _path.LineTo(bounds.Right, prevY);
+                    _fillPath.LineTo(bounds.Right, prevY);
 #if DEBUG
                     Console.WriteLine($"[{series.Label}] Extending to right edge: ({bounds.Right:F1}, {prevY:F1})");
 #endif
                 }
 
                 // Complete fill path back to bottom
-                fillPath.LineTo(prevX < bounds.Right ? bounds.Right : prevX, bounds.Bottom);
-                fillPath.Close();
+                _fillPath.LineTo(prevX < bounds.Right ? bounds.Right : prevX, bounds.Bottom);
+                _fillPath.Close();
             }
 
             // Draw fill first, then line on top
-            canvas.DrawPath(fillPath, fillPaint);
-            canvas.DrawPath(path, linePaint);
+            canvas.DrawPath(_fillPath, _fillPaint);
+            canvas.DrawPath(_path, _linePaint);
 
             NextSeries:; // Label for early exit from right edge interpolation
         }
@@ -379,7 +380,10 @@ public sealed class TimeSeriesChart : ChartBase
 
     public override void Dispose()
     {
-        _axisPaint.Dispose();
+        _linePaint.Dispose();
+        _fillPaint.Dispose();
+        _path.Dispose();
+        _fillPath.Dispose();
         base.Dispose();
     }
 }

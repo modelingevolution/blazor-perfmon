@@ -6,7 +6,7 @@ namespace ModelingEvolution.BlazorPerfMon.Server.Services;
 /// <summary>
 /// Builds the PerformanceConfigurationSnapshot from explicit layout configuration.
 /// </summary>
-public sealed class MetricsConfigurationBuilder
+internal sealed class MetricsConfigurationBuilder
 {
     private readonly IOptions<MonitorSettings> _settings;
 

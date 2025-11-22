@@ -11,7 +11,7 @@ namespace ModelingEvolution.BlazorPerfMon.Server.Services;
 /// Each client gets a dedicated ActionBlock for sending metrics.
 /// Sends PerformanceConfigurationSnapshot as first message.
 /// </summary>
-public sealed class WebSocketService
+internal sealed class WebSocketService
 {
     private readonly MultiplexService _multiplexService;
     private readonly MetricsConfigurationBuilder _configurationBuilder;

@@ -10,7 +10,7 @@ namespace ModelingEvolution.BlazorPerfMon.Server.Services;
 /// Manages the metrics collection loop using PeriodicTimer.
 /// Only runs when there are connected WebSocket clients.
 /// </summary>
-public sealed class PerformanceMonitorEngine : IDisposable
+internal sealed class PerformanceMonitorEngine : IDisposable
 {
     private readonly CpuCollector _cpuCollector;
     private readonly RamCollector _ramCollector;

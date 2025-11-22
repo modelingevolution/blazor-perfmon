@@ -8,7 +8,7 @@ namespace ModelingEvolution.BlazorPerfMon.Client.Rendering;
 /// <summary>
 /// Chart for displaying network interface Rx/Tx metrics.
 /// </summary>
-public sealed class NetworkChart : IChart
+internal sealed class NetworkChart : IChart
 {
     private readonly string _interfaceName;
     private readonly float _intervalSec;
@@ -20,6 +20,13 @@ public sealed class NetworkChart : IChart
 
     private readonly TimeSeriesChart _renderer;
 
+    /// <summary>
+    /// Initializes a new instance of the NetworkChart class.
+    /// </summary>
+    /// <param name="interfaceName">The network interface name to monitor (e.g., "eth0", "wlan0")</param>
+    /// <param name="intervalSec">The collection interval in seconds for rate calculation</param>
+    /// <param name="timeWindowMs">The time window in milliseconds for historical data display</param>
+    /// <param name="timestampAccessor">Accessor for metric timestamps</param>
     public NetworkChart(string interfaceName, float intervalSec, int timeWindowMs,
                         SampleAccessor<uint> timestampAccessor)
     {
@@ -67,5 +74,10 @@ public sealed class NetworkChart : IChart
         _renderer.Location = SKPoint.Empty;
         _renderer.Size = size;
         _renderer.Render(canvas);
+    }
+
+    public void Dispose()
+    {
+        _renderer.Dispose();
     }
 }

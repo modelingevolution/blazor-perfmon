@@ -7,7 +7,7 @@ namespace ModelingEvolution.BlazorPerfMon.Server.Collectors;
 /// GPU collector for NVIDIA Jetson platforms using tegrastats.
 /// Supports Jetson Orin NX, AGX Orin, and other Tegra-based devices.
 /// </summary>
-public sealed class NvTegraGpuCollector : IGpuCollector
+internal sealed class NvTegraGpuCollector : IGpuCollector
 {
     private readonly ILogger<NvTegraGpuCollector> _logger;
     private Process? _tegrastatsProcess;

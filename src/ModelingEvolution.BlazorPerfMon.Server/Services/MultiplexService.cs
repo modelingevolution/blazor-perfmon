@@ -8,7 +8,7 @@ namespace ModelingEvolution.BlazorPerfMon.Server.Services;
 /// Stage 4: Uses nested JoinBlocks to combine (CPU+GPU+RAM), Network (with collection time), Disk, and Docker data.
 /// Tracks connected clients and fires events when first client connects or last client disconnects.
 /// </summary>
-public sealed class MultiplexService : IDisposable
+internal sealed class MultiplexService : IDisposable
 {
     private readonly BufferBlock<(float[] CpuLoads, float[] GpuLoads, RamMetric Ram, uint TimestampMs)> _cpuGpuBuffer;
     private readonly BufferBlock<(NetworkMetric[] Metrics, uint CollectionTimeMs)> _networkBuffer;

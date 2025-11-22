@@ -7,13 +7,21 @@ namespace ModelingEvolution.BlazorPerfMon.Client.Rendering;
 /// <summary>
 /// Bar chart for displaying per-GPU loads.
 /// </summary>
-public sealed class GpuBarChart : IChart
+internal sealed class GpuBarChart : IChart
 {
     private readonly int _gpuCount;
     private readonly SampleAccessor<float>[] _gpuAccessors;
     private readonly SampleAccessor<string>[] _gpuLabelAccessors;
     private readonly BarChart _renderer;
 
+    // Reusable arrays to avoid LINQ allocations in hot rendering path
+    private readonly float[] _gpuLoads;
+    private readonly string[] _gpuLabels;
+
+    /// <summary>
+    /// Initializes a new instance of the GpuBarChart class.
+    /// </summary>
+    /// <param name="gpuCount">The number of GPUs to display</param>
     public GpuBarChart(int gpuCount)
     {
         _gpuCount = gpuCount;
@@ -21,6 +29,8 @@ public sealed class GpuBarChart : IChart
 
         _gpuAccessors = new SampleAccessor<float>[gpuCount];
         _gpuLabelAccessors = new SampleAccessor<string>[gpuCount];
+        _gpuLoads = new float[gpuCount];
+        _gpuLabels = new string[gpuCount];
 
         for (int i = 0; i < gpuCount; i++)
         {
@@ -29,6 +39,7 @@ public sealed class GpuBarChart : IChart
                 sample.GpuLoads != null && gpuIndex < sample.GpuLoads.Length ? sample.GpuLoads[gpuIndex] : 0f);
             _gpuLabelAccessors[i] = new SampleAccessor<string>(emptyBuffer, sample =>
                 gpuCount > 1 ? $"GPU{gpuIndex}" : "GPU");
+            _gpuLabels[i] = gpuCount > 1 ? $"GPU{gpuIndex}" : "GPU"; // Initialize labels once
         }
 
         _renderer = new BarChart();
@@ -46,9 +57,12 @@ public sealed class GpuBarChart : IChart
     {
         if (_gpuCount > 0)
         {
-            var gpuLoads = _gpuAccessors.Select(accessor => accessor.Last());
-            var gpuLabels = _gpuLabelAccessors.Select(accessor => accessor.First());
-            _renderer.SetData("GPU", gpuLabels, _gpuCount, gpuLoads, _gpuCount);
+            // Populate arrays without LINQ to avoid allocations in hot path
+            for (int i = 0; i < _gpuCount; i++)
+            {
+                _gpuLoads[i] = _gpuAccessors[i].Last();
+            }
+            _renderer.SetData("GPU", _gpuLabels, _gpuCount, _gpuLoads, _gpuCount);
         }
         else
         {
@@ -58,5 +72,10 @@ public sealed class GpuBarChart : IChart
         _renderer.Location = SKPoint.Empty;
         _renderer.Size = size;
         _renderer.Render(canvas);
+    }
+
+    public void Dispose()
+    {
+        _renderer.Dispose();
     }
 }

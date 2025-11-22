@@ -8,7 +8,7 @@ namespace ModelingEvolution.BlazorPerfMon.Client.Rendering;
 /// <summary>
 /// Chart for displaying disk Read/Write metrics.
 /// </summary>
-public sealed class DiskChart : IChart
+internal sealed class DiskChart : IChart
 {
     private readonly string _diskDevice;
     private readonly float _intervalSec;
@@ -20,6 +20,13 @@ public sealed class DiskChart : IChart
 
     private readonly TimeSeriesChart _renderer;
 
+    /// <summary>
+    /// Initializes a new instance of the DiskChart class.
+    /// </summary>
+    /// <param name="diskDevice">The disk device name to monitor (e.g., "sda", "nvme0n1")</param>
+    /// <param name="intervalSec">The collection interval in seconds for rate calculation</param>
+    /// <param name="timeWindowMs">The time window in milliseconds for historical data display</param>
+    /// <param name="timestampAccessor">Accessor for metric timestamps</param>
     public DiskChart(string diskDevice, float intervalSec, int timeWindowMs,
                      SampleAccessor<uint> timestampAccessor)
     {
@@ -67,5 +74,10 @@ public sealed class DiskChart : IChart
         _renderer.Location = SKPoint.Empty;
         _renderer.Size = size;
         _renderer.Render(canvas);
+    }
+
+    public void Dispose()
+    {
+        _renderer.Dispose();
     }
 }

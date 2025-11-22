@@ -8,11 +8,17 @@ namespace ModelingEvolution.BlazorPerfMon.Client.Collections;
 /// Provides IEnumerable<T> without allocating arrays - selector is applied during enumeration.
 /// Can be updated with a new buffer reference for time-consistent rendering.
 /// </summary>
-public sealed class SampleAccessor<T> : IEnumerable<T>
+/// <typeparam name="T">The type of projected values returned by the selector</typeparam>
+internal sealed class SampleAccessor<T> : IEnumerable<T>
 {
     private ImmutableCircularBuffer<MetricSample> _samples;
     private readonly Func<MetricSample, T> _selector;
 
+    /// <summary>
+    /// Initializes a new instance of the SampleAccessor class.
+    /// </summary>
+    /// <param name="samples">The initial buffer of metric samples</param>
+    /// <param name="selector">Function to project each MetricSample to type T</param>
     public SampleAccessor(
         ImmutableCircularBuffer<MetricSample> samples,
         Func<MetricSample, T> selector)
@@ -25,6 +31,7 @@ public sealed class SampleAccessor<T> : IEnumerable<T>
     /// Updates the buffer reference for time-consistent rendering.
     /// All accessors should be updated with the same buffer snapshot before rendering.
     /// </summary>
+    /// <param name="samples">The new buffer snapshot to use for enumeration</param>
     public void UpdateBuffer(ImmutableCircularBuffer<MetricSample> samples)
     {
         _samples = samples;

@@ -31,6 +31,10 @@ public sealed class WebSocketClient : IAsyncDisposable
     /// </summary>
     public event Action<bool>? OnConnectionStateChanged;
 
+    /// <summary>
+    /// Initializes a new instance of the WebSocketClient class.
+    /// </summary>
+    /// <param name="wsUrl">The WebSocket URL to connect to</param>
     public WebSocketClient(string wsUrl)
     {
         _wsUrl = wsUrl;

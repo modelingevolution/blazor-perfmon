@@ -8,7 +8,7 @@ namespace ModelingEvolution.BlazorPerfMon.Client.Rendering;
 /// Interface for all chart types in the performance monitor.
 /// Charts render at (0,0) and are positioned by the caller via canvas transforms.
 /// </summary>
-public interface IChart
+public interface IChart : IDisposable
 {
     /// <summary>
     /// Updates the chart's data accessors with a new buffer snapshot.

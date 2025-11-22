@@ -6,7 +6,7 @@ namespace ModelingEvolution.BlazorPerfMon.Server.Collectors;
 /// Collects RAM usage statistics by reading /proc/meminfo.
 /// Returns percentage used and absolute byte values (used and total).
 /// </summary>
-public sealed class RamCollector : IMetricsCollector<RamMetric>
+internal sealed class RamCollector : IMetricsCollector<RamMetric>
 {
     private const string ProcMeminfoPath = "/proc/meminfo";
 

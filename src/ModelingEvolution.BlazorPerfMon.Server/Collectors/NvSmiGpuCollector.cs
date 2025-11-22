@@ -6,7 +6,7 @@ namespace ModelingEvolution.BlazorPerfMon.Server.Collectors;
 /// GPU collector for desktop NVIDIA GPUs using nvidia-smi.
 /// Supports Turing, Ampere, Ada Lovelace architectures.
 /// </summary>
-public sealed class NvSmiGpuCollector : IGpuCollector
+internal sealed class NvSmiGpuCollector : IGpuCollector
 {
     private readonly ILogger<NvSmiGpuCollector> _logger;
 

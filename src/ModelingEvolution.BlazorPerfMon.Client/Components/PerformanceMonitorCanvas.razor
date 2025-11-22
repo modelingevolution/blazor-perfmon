@@ -234,26 +234,16 @@
         MetricsStore.AddSample(sample);
         _latestCollectionTimeMs = sample.CollectionDurationMs;
 
-        // Only update UI if status changed
-        var newStatus = CalculateStatusClass();
-        if (newStatus != _currentStatusClass)
-        {
-            _currentStatusClass = newStatus;
-            InvokeAsync(StateHasChanged);
-        }
+        // Update status class (render loop will pick up changes)
+        _currentStatusClass = CalculateStatusClass();
     }
 
     private void OnConnectionStateChanged(bool isConnected)
     {
         _isConnected = isConnected;
 
-        // Connection state change always affects status
-        var newStatus = CalculateStatusClass();
-        if (newStatus != _currentStatusClass)
-        {
-            _currentStatusClass = newStatus;
-            InvokeAsync(StateHasChanged);
-        }
+        // Update status class (render loop will pick up changes)
+        _currentStatusClass = CalculateStatusClass();
     }
 
     private void OnMetricsUpdated()

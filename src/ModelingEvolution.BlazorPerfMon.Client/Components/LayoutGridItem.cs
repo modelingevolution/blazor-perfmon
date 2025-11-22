@@ -7,7 +7,7 @@ namespace ModelingEvolution.BlazorPerfMon.Client.Components;
 /// Represents a single chart positioned within a grid layout.
 /// Responsible for calculating its own bounds based on grid position and total grid dimensions.
 /// </summary>
-public sealed class LayoutGridItem
+internal sealed class LayoutGridItem
 {
     /// <summary>
     /// Zero-based row index in the grid.
@@ -48,12 +48,12 @@ public sealed class LayoutGridItem
     /// <summary>
     /// Metadata about the metric source being displayed (for debugging/logging).
     /// </summary>
-    public MetricSource Source { get; init; }
+    public required MetricSource Source { get; init; }
 
     /// <summary>
     /// The chart instance to render.
     /// </summary>
-    public IChart Chart { get; init; } = null!;
+    public required IChart Chart { get; init; }
 
     /// <summary>
     /// Calculates this grid item's bounds within the total canvas bounds.

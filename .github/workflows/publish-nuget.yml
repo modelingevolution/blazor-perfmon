@@ -1,0 +1,92 @@
+name: Publish NuGet Packages
+
+on:
+  push:
+    tags:
+      - 'perfmon/*'
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version to publish (e.g., 1.0.0)'
+        required: true
+        type: string
+
+env:
+  DOTNET_VERSION: '10.0.x'
+  CONFIGURATION: Release
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Setup .NET
+      uses: actions/setup-dotnet@v4
+      with:
+        dotnet-version: ${{ env.DOTNET_VERSION }}
+
+    - name: Extract version from tag
+      id: get_version
+      run: |
+        if [ "${{ github.event_name }}" == "workflow_dispatch" ]; then
+          VERSION="${{ github.event.inputs.version }}"
+        else
+          # Extract version from tag format: perfmon/1.0.0
+          VERSION=${GITHUB_REF#refs/tags/perfmon/}
+        fi
+        echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+        echo "Publishing version: $VERSION"
+
+    - name: Restore dependencies
+      run: dotnet restore BlazorPerfMon.sln
+
+    - name: Build solution
+      run: dotnet build BlazorPerfMon.sln --configuration ${{ env.CONFIGURATION }} --no-restore /p:Version=${{ steps.get_version.outputs.VERSION }}
+
+    - name: Pack NuGet packages
+      run: |
+        dotnet pack src/ModelingEvolution.BlazorPerfMon.Shared/ModelingEvolution.BlazorPerfMon.Shared.csproj \
+          --configuration ${{ env.CONFIGURATION }} \
+          --no-build \
+          --output ./artifacts \
+          /p:PackageVersion=${{ steps.get_version.outputs.VERSION }} \
+          /p:IncludeSymbols=true \
+          /p:SymbolPackageFormat=snupkg
+
+        dotnet pack src/ModelingEvolution.BlazorPerfMon.Server/ModelingEvolution.BlazorPerfMon.Server.csproj \
+          --configuration ${{ env.CONFIGURATION }} \
+          --no-build \
+          --output ./artifacts \
+          /p:PackageVersion=${{ steps.get_version.outputs.VERSION }} \
+          /p:IncludeSymbols=true \
+          /p:SymbolPackageFormat=snupkg
+
+        dotnet pack src/ModelingEvolution.BlazorPerfMon.Client/ModelingEvolution.BlazorPerfMon.Client.csproj \
+          --configuration ${{ env.CONFIGURATION }} \
+          --no-build \
+          --output ./artifacts \
+          /p:PackageVersion=${{ steps.get_version.outputs.VERSION }} \
+          /p:IncludeSymbols=true \
+          /p:SymbolPackageFormat=snupkg
+
+    - name: List artifacts
+      run: ls -lh ./artifacts
+
+    - name: Publish to NuGet.org
+      run: |
+        dotnet nuget push "./artifacts/*.nupkg" \
+          --api-key ${{ secrets.NUGET_API_KEY }} \
+          --source https://api.nuget.org/v3/index.json \
+          --skip-duplicate
+
+    - name: Upload artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: nuget-packages-${{ steps.get_version.outputs.VERSION }}
+        path: ./artifacts/*.nupkg
+        retention-days: 30
