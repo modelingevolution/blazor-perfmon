@@ -1,0 +1,55 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# CI/CD
+.github/
+
+# IDE
+.vs/
+.vscode/
+.idea/
+*.user
+*.suo
+*.sln.docstates
+
+# Build output
+**/bin/
+**/obj/
+**/out/
+artifacts/
+
+# NuGet
+*.nupkg
+*.snupkg
+packages/
+
+# Test output
+**/TestResults/
+**/*.trx
+
+# Documentation
+*.md
+docs/
+LICENSE
+SPEC.md
+
+# Tools
+.claude/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Scripts (keep build scripts but exclude release)
+release.sh
+*.sh
+
+# Docker
+docker-compose*.yml
+**/Dockerfile
+**/.dockerignore

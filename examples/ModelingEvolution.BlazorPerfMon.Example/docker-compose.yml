@@ -1,0 +1,78 @@
+version: '3.8'
+
+services:
+  perfmon:
+    build:
+      context: ../..
+      dockerfile: examples/ModelingEvolution.BlazorPerfMon.Example/Dockerfile
+      args:
+        - TARGETARCH=${TARGETARCH:-amd64}
+    image: modelingevolution/blazor-perfmon-example:latest
+    container_name: perfmon-example
+    ports:
+      - "5000:8080"
+    environment:
+      - ASPNETCORE_ENVIRONMENT=Development
+      - ASPNETCORE_URLS=http://+:8080
+      # Override monitoring settings for container environment
+      - MonitorSettings__NetworkInterface=eth0
+      - MonitorSettings__DiskDevice=sda
+      - MonitorSettings__CollectionIntervalMs=500
+      - MonitorSettings__GpuCollectorType=NvSmi
+    volumes:
+      # Mount Docker socket to enable container monitoring
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      # Mount proc filesystem for system metrics (required)
+      - /proc:/host/proc:ro
+      # Override appsettings if needed
+      # - ./appsettings.Production.json:/app/appsettings.Production.json:ro
+    # Run with elevated privileges to access system metrics
+    # Note: For production, use more restrictive capabilities
+    privileged: false
+    cap_add:
+      - SYS_ADMIN  # Required for reading /proc filesystem
+      - NET_ADMIN  # Required for network statistics
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
+    networks:
+      - perfmon-network
+
+  # Optional: Example workload containers to monitor
+  nginx-demo:
+    image: nginx:alpine
+    container_name: perfmon-nginx-demo
+    ports:
+      - "8081:80"
+    networks:
+      - perfmon-network
+    labels:
+      - "com.example.description=Demo NGINX container for monitoring"
+
+  redis-demo:
+    image: redis:alpine
+    container_name: perfmon-redis-demo
+    networks:
+      - perfmon-network
+    labels:
+      - "com.example.description=Demo Redis container for monitoring"
+
+networks:
+  perfmon-network:
+    driver: bridge
+
+# For GPU monitoring with NVIDIA GPUs, uncomment the following:
+# Add this to the perfmon service:
+#   deploy:
+#     resources:
+#       reservations:
+#         devices:
+#           - driver: nvidia
+#             count: all
+#             capabilities: [gpu, utility, compute]
