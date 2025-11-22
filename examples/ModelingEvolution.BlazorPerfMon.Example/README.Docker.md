@@ -20,13 +20,24 @@ Access the application at: http://localhost:5000
 cd examples/ModelingEvolution.BlazorPerfMon.Example
 ./build-docker.sh --amd64-only --load
 
-# Run the container
+# Run the container (x64/amd64)
 docker run -d \
   --name perfmon \
   -p 5000:8080 \
   -v /var/run/docker.sock:/var/run/docker.sock:ro \
   -v /proc:/host/proc:ro \
   --cap-add SYS_ADMIN \
+  modelingevolution/blazor-perfmon-example:latest
+
+# Run on NVIDIA Jetson (ARM64) with tegrastats GPU monitoring
+docker run -d \
+  --name perfmon \
+  -p 5000:8080 \
+  -v /var/run/docker.sock:/var/run/docker.sock:ro \
+  -v /proc:/host/proc:ro \
+  -v /usr/bin/tegrastats:/usr/bin/tegrastats:ro \
+  --cap-add SYS_ADMIN \
+  --cap-add NET_ADMIN \
   modelingevolution/blazor-perfmon-example:latest
 ```
 
@@ -118,9 +129,47 @@ cap_add:
 
 ## GPU Support
 
-### NVIDIA GPUs
+### NVIDIA Jetson (Tegra) Devices
 
-For NVIDIA GPU monitoring, uncomment the GPU configuration in `docker-compose.yml`:
+For NVIDIA Jetson devices (Orin NX, AGX Orin, Xavier NX, etc.), the application uses the native `tegrastats` tool for GPU monitoring:
+
+**Configuration**: Set `GpuCollectorType` to `"NvTegra"` in `appsettings.json`:
+
+```json
+{
+  "MonitorSettings": {
+    "GpuCollectorType": "NvTegra"
+  }
+}
+```
+
+**Docker Run**: Mount tegrastats from the host:
+
+```bash
+docker run -d \
+  -p 5000:8080 \
+  -v /var/run/docker.sock:/var/run/docker.sock:ro \
+  -v /proc:/host/proc:ro \
+  -v /usr/bin/tegrastats:/usr/bin/tegrastats:ro \
+  --cap-add SYS_ADMIN \
+  --cap-add NET_ADMIN \
+  modelingevolution/blazor-perfmon-example:latest
+```
+
+**Docker Compose**: Add the tegrastats volume:
+
+```yaml
+volumes:
+  - /var/run/docker.sock:/var/run/docker.sock:ro
+  - /proc:/host/proc:ro
+  - /usr/bin/tegrastats:/usr/bin/tegrastats:ro
+environment:
+  - MonitorSettings__GpuCollectorType=NvTegra
+```
+
+### NVIDIA Desktop GPUs (x64)
+
+For NVIDIA desktop GPU monitoring, uncomment the GPU configuration in `docker-compose.yml`:
 
 ```yaml
 deploy:
