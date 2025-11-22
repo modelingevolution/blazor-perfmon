@@ -96,7 +96,9 @@ internal sealed class MultiplexService : IDisposable
                     DiskMetrics = diskMetrics,
                     NetworkMetrics = sharedNetworkMetrics,
                     DockerContainers = dockerMetrics,
-                    CollectionDurationMs = collectionTimeMs
+                    CollectionDurationMs = collectionTimeMs,
+                    CpuAverage = CalculateAverage(cpuLoads),
+                    GpuAverage = CalculateAverage(gpuLoads)
                 };
 
                 return MessagePackSerializer.Serialize(sample);
@@ -201,6 +203,21 @@ internal sealed class MultiplexService : IDisposable
         {
             LastClientDisconnected?.Invoke();
         }
+    }
+
+    /// <summary>
+    /// Calculates the average of a float array without LINQ to avoid allocations.
+    /// </summary>
+    private static float CalculateAverage(float[]? values)
+    {
+        if (values == null || values.Length == 0)
+            return 0f;
+
+        float sum = 0f;
+        for (int i = 0; i < values.Length; i++)
+            sum += values[i];
+
+        return sum / values.Length;
     }
 
     public void Dispose()

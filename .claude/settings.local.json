@@ -39,7 +39,10 @@
       "Bash(timeout 10 tail:*)",
       "WebFetch(domain:raw.githubusercontent.com)",
       "Bash(timeout 15 dotnet run:*)",
-      "Bash(./release.sh:*)"
+      "Bash(./release.sh:*)",
+      "Bash(gh run view:*)",
+      "Bash(git push:*)",
+      "Bash(ssh:*)"
     ],
     "deny": [],
     "ask": []

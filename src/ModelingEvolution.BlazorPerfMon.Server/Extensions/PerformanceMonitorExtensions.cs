@@ -16,7 +16,7 @@ public static class PerformanceMonitorExtensions
 {
     /// <summary>
     /// Registers all Performance Monitor services (collectors, multiplex service, WebSocket service, engine).
-    /// GPU collector type is determined by MonitorSettings.GpuCollectorType ("nvml", "nvsmi", or "nvtegra").
+    /// GPU collector type is determined by MonitorSettings.GpuCollectorType ("nvml", "nvsmi", "nvtegra", or "none").
     /// </summary>
     public static IServiceCollection AddPerformanceMonitor(this IServiceCollection services, IConfiguration configuration)
     {
@@ -42,8 +42,9 @@ public static class PerformanceMonitorExtensions
             {
                 "nvtegra" => new NvTegraGpuCollector(logger.CreateLogger<NvTegraGpuCollector>()),
                 "nvsmi" => new NvSmiGpuCollector(logger.CreateLogger<NvSmiGpuCollector>()),
-                "nvml" => new NvmlGpuCollector(logger.CreateLogger<NvmlGpuCollector>(), settingsOptions),
-                _ => new NvmlGpuCollector(logger.CreateLogger<NvmlGpuCollector>(), settingsOptions)
+                "nvml" => CreateNvmlCollector(logger, settingsOptions),
+                "none" => new NoOpGpuCollector(),
+                _ => new NvSmiGpuCollector(logger.CreateLogger<NvSmiGpuCollector>()) // Default to NvSmi (safest option)
             };
         });
 
@@ -54,6 +55,15 @@ public static class PerformanceMonitorExtensions
         services.AddSingleton<PerformanceMonitorEngine>();
 
         return services;
+    }
+
+    /// <summary>
+    /// Creates NvmlGpuCollector in a separate method to prevent assembly loading unless explicitly used.
+    /// This isolation ensures ManagedNvml assembly is only loaded when "nvml" is configured.
+    /// </summary>
+    private static IGpuCollector CreateNvmlCollector(ILoggerFactory loggerFactory, IOptions<MonitorSettings> settings)
+    {
+        return new NvmlGpuCollector(loggerFactory.CreateLogger<NvmlGpuCollector>(), settings);
     }
 
     /// <summary>

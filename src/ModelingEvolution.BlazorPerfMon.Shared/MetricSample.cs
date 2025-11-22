@@ -61,4 +61,18 @@ public readonly record struct MetricSample
     /// </summary>
     [Key(6)]
     public uint CollectionDurationMs { get; init; }
+
+    /// <summary>
+    /// Average CPU load across all cores (0-100).
+    /// Pre-calculated on server to avoid client-side LINQ overhead.
+    /// </summary>
+    [Key(8)]
+    public float CpuAverage { get; init; }
+
+    /// <summary>
+    /// Average GPU load across all GPUs (0-100).
+    /// Pre-calculated on server to avoid client-side LINQ overhead.
+    /// </summary>
+    [Key(9)]
+    public float GpuAverage { get; init; }
 }

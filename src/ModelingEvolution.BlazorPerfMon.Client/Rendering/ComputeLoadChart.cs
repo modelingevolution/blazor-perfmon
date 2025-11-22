@@ -29,11 +29,9 @@ internal sealed class ComputeLoadChart : IChart
 
         var emptyBuffer = new ImmutableCircularBuffer<MetricSample>(1);
 
-        _cpuAvgAccessor = new SampleAccessor<float>(emptyBuffer, sample =>
-            sample.CpuLoads != null && sample.CpuLoads.Length > 0 ? sample.CpuLoads.Average() : 0f);
+        _cpuAvgAccessor = new SampleAccessor<float>(emptyBuffer, sample => sample.CpuAverage);
 
-        _gpuAvgAccessor = new SampleAccessor<float>(emptyBuffer, sample =>
-            sample.GpuLoads != null && sample.GpuLoads.Length > 0 ? sample.GpuLoads.Average() : 0f);
+        _gpuAvgAccessor = new SampleAccessor<float>(emptyBuffer, sample => sample.GpuAverage);
 
         _ramPercentAccessor = new SampleAccessor<float>(emptyBuffer, sample =>
             sample.Ram.TotalBytes > 0 ? (float)sample.Ram.UsedBytes / sample.Ram.TotalBytes * 100f : 0f);
