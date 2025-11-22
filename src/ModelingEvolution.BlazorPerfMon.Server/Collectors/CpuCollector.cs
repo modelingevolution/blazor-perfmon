@@ -40,18 +40,18 @@ internal sealed class CpuCollector : IMetricsCollector<float[]>
             for (int core = 0; core < _coreCount; core++)
             {
                 // Find line for this core (cpu0, cpu1, etc.)
-                var line = lines.FirstOrDefault(l => l.StartsWith($"cpu{core} "));
-                if (line == null)
+                var line = lines.FirstOrDefault(l => l != null && l.StartsWith($"cpu{core} "));
+                if (string.IsNullOrEmpty(line))
                 {
-                    _loads[core] = 0f;
+                    _loads![core] = 0f;
                     continue;
                 }
 
                 // Parse CPU times
-                var parts = line.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+                var parts = line!.Split(' ', StringSplitOptions.RemoveEmptyEntries);
                 if (parts.Length < 5)
                 {
-                    _loads[core] = 0f;
+                    _loads![core] = 0f;
                     continue;
                 }
 

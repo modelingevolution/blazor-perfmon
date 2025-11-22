@@ -17,7 +17,6 @@ internal sealed class DockerCollector : IMetricsCollector<DockerContainerMetric[
 {
     private readonly ILogger<DockerCollector>? _logger;
     private readonly DockerClient? _dockerClient;
-    private readonly bool _isDockerAvailable;
     private readonly ConcurrentDictionary<string, DockerContainerMetric> _cachedMetrics = new();
     private readonly ConcurrentDictionary<string, CancellationTokenSource> _monitoringCancellations = new();
     private readonly CancellationTokenSource _cts = new();
@@ -42,7 +41,6 @@ internal sealed class DockerCollector : IMetricsCollector<DockerContainerMetric[
 
             // Test connection by pinging Docker
             _dockerClient.System.PingAsync().Wait(TimeSpan.FromSeconds(2));
-            _isDockerAvailable = true;
 
             _logger?.LogInformation("Docker collector initialized successfully");
 
@@ -51,7 +49,6 @@ internal sealed class DockerCollector : IMetricsCollector<DockerContainerMetric[
         }
         catch (Exception ex)
         {
-            _isDockerAvailable = false;
             _logger?.LogWarning(ex, "Docker not available, collector disabled");
         }
     }

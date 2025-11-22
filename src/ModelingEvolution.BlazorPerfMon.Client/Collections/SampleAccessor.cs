@@ -5,10 +5,10 @@ namespace ModelingEvolution.BlazorPerfMon.Client.Collections;
 
 /// <summary>
 /// Zero-copy adapter/facade over ImmutableCircularBuffer with projection selector.
-/// Provides IEnumerable<T> without allocating arrays - selector is applied during enumeration.
+/// Provides IEnumerable without allocating arrays - selector is applied during enumeration.
 /// Can be updated with a new buffer reference for time-consistent rendering.
 /// </summary>
-/// <typeparam name="T">The type of projected values returned by the selector</typeparam>
+/// <typeparam name="T">The type of projected values returned by the selector.</typeparam>
 internal sealed class SampleAccessor<T> : IEnumerable<T>
 {
     private ImmutableCircularBuffer<MetricSample> _samples;
@@ -41,6 +41,15 @@ internal sealed class SampleAccessor<T> : IEnumerable<T>
     /// Gets the number of samples in the buffer.
     /// </summary>
     public int Count => _samples.Count;
+
+    /// <summary>
+    /// Gets the last (most recent) projected value. O(1) operation.
+    /// Throws InvalidOperationException if the buffer is empty.
+    /// </summary>
+    public T Last()
+    {
+        return _selector(_samples.Last);
+    }
 
     /// <summary>
     /// Enumerates the projected values without allocating arrays.

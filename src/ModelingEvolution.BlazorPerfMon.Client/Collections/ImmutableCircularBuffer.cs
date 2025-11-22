@@ -19,6 +19,7 @@ public sealed class ImmutableCircularBuffer<T> : IEnumerable<T>
     private readonly ImmutableQueue<T> _queue;
     private readonly int _capacity;
     private readonly int _count;
+    private readonly T? _last;
 
     /// <summary>
     /// Initializes a new instance of the ImmutableCircularBuffer class.
@@ -33,13 +34,15 @@ public sealed class ImmutableCircularBuffer<T> : IEnumerable<T>
         _capacity = capacity;
         _queue = ImmutableQueue<T>.Empty;
         _count = 0;
+        _last = default;
     }
 
-    private ImmutableCircularBuffer(ImmutableQueue<T> queue, int capacity, int count)
+    private ImmutableCircularBuffer(ImmutableQueue<T> queue, int capacity, int count, T? last)
     {
         _queue = queue;
         _capacity = capacity;
         _count = count;
+        _last = last;
     }
 
     /// <summary>
@@ -60,7 +63,7 @@ public sealed class ImmutableCircularBuffer<T> : IEnumerable<T>
             newCount = _capacity;
         }
 
-        return new ImmutableCircularBuffer<T>(newQueue, _capacity, newCount);
+        return new ImmutableCircularBuffer<T>(newQueue, _capacity, newCount, item);
     }
 
     /// <summary>
@@ -72,6 +75,20 @@ public sealed class ImmutableCircularBuffer<T> : IEnumerable<T>
     /// Gets the maximum capacity of the buffer.
     /// </summary>
     public int Capacity => _capacity;
+
+    /// <summary>
+    /// Gets the last (most recently added) item in the buffer. O(1) operation.
+    /// Throws InvalidOperationException if the buffer is empty.
+    /// </summary>
+    public T Last
+    {
+        get
+        {
+            if (_count == 0)
+                throw new InvalidOperationException("Buffer is empty");
+            return _last!;
+        }
+    }
 
     public IEnumerator<T> GetEnumerator()
     {

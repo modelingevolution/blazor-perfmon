@@ -15,7 +15,7 @@ internal sealed class ComputeLoadChart : IChart
     private readonly SampleAccessor<float> _ramPercentAccessor;
     private readonly SampleAccessor<uint> _timestampAccessor;
     private readonly TimeSeriesChart _renderer;
-    private ImmutableCircularBuffer<MetricSample> _buffer;
+    private ImmutableCircularBuffer<MetricSample> _buffer = new ImmutableCircularBuffer<MetricSample>(1);
 
     /// <summary>
     /// Initializes a new instance of the ComputeLoadChart class.

@@ -1,3 +1,4 @@
+using ModelingEvolution.BlazorPerfMon.Client.Collections;
 using SkiaSharp;
 
 namespace ModelingEvolution.BlazorPerfMon.Client.Rendering;
@@ -81,9 +82,9 @@ public sealed class BarChart : ChartBase
             canvas.DrawLine(x, barAreaTop, x, barAreaTop + (barHeight + barSpacing) * barCount, GridPaint);
         }
 
-        // Use Zip to enumerate values and labels together
+        // Use zero-allocation Zip to enumerate values and labels together
         int i = 0;
-        foreach (var (value, label) in _values.Zip(_labels))
+        foreach (var (value, label) in _values.ZipValues(_labels))
         {
             float y = barAreaTop + i * (barHeight + barSpacing);
             float clampedValue = Math.Clamp(value, 0f, 100f);

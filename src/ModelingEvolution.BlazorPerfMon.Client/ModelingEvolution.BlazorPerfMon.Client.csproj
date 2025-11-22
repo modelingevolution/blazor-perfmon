@@ -4,6 +4,8 @@
     <TargetFramework>net10.0</TargetFramework>
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
+    <!-- Suppress less critical warnings: CS1591 (missing XML docs), CS0618 (obsolete SkiaSharp APIs) -->
+    <NoWarn>$(NoWarn);CS1591;CS0618</NoWarn>
 
     <!-- NuGet Package Metadata -->
     <PackageId>ModelingEvolution.PerformanceMonitor.Client</PackageId>
@@ -46,6 +48,11 @@
 
   <ItemGroup>
     <ProjectReference Include="..\ModelingEvolution.BlazorPerfMon.Shared\ModelingEvolution.BlazorPerfMon.Shared.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="ModelingEvolution.BlazorPerfMon.Tests" />
+    <InternalsVisibleTo Include="ModelingEvolution.BlazorPerfMon.Benchmarks" />
   </ItemGroup>
 
 </Project>

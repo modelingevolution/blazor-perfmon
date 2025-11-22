@@ -7,6 +7,14 @@ FROM mcr.microsoft.com/dotnet/sdk:10.0 AS build
 ARG TARGETARCH
 WORKDIR /src
 
+# Install Python (required by Emscripten for WASM compilation)
+RUN apt-get update && apt-get install -y python3 python3-pip && \
+    ln -s /usr/bin/python3 /usr/bin/python && \
+    rm -rf /var/lib/apt/lists/*
+
+# Install wasm-tools workload for Blazor WebAssembly
+RUN dotnet workload install wasm-tools
+
 # Copy solution and project files
 COPY ["BlazorPerfMon.sln", "./"]
 COPY ["examples/ModelingEvolution.BlazorPerfMon.Example/ModelingEvolution.BlazorPerfMon.Example.sln", "examples/ModelingEvolution.BlazorPerfMon.Example/"]

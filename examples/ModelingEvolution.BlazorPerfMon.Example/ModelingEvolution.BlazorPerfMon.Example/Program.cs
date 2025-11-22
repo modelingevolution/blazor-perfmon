@@ -20,10 +20,9 @@ if (app.Environment.IsDevelopment())
 else
 {
     app.UseExceptionHandler("/Error", createScopeForErrors: true);
-    app.UseHsts();
 }
 
-app.UseHttpsRedirection();
+// HTTP only - no HTTPS redirection
 
 // Configure middleware
 app.UseRouting();

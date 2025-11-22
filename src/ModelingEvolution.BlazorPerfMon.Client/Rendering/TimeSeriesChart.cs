@@ -1,3 +1,4 @@
+using ModelingEvolution.BlazorPerfMon.Client.Collections;
 using SkiaSharp;
 
 namespace ModelingEvolution.BlazorPerfMon.Client.Rendering;
@@ -18,7 +19,9 @@ public sealed class TimeSeriesChart : ChartBase
 
     private string _title = "Time Series";
     private int _maxDataPoints = 120;
+#pragma warning disable CS0414 // Field is assigned but never used - reserved for future use
     private int _collectionIntervalMs = 500;
+#pragma warning restore CS0414
     private int _timeWindowMs = 60000; // 60 seconds default
     private float _minValue = 0f;
     private float _maxValue = 100f;
@@ -202,8 +205,8 @@ public sealed class TimeSeriesChart : ChartBase
             float cullThreshold = bounds.Left - (bounds.Width * 0.05f);
             float rightMargin = bounds.Right + (bounds.Width * 0.05f);
 
-            // Zip data with timestamps for correlated enumeration
-            foreach (var (value, timestamp) in series.Data.Zip(_timestamps))
+            // Zip data with timestamps for correlated enumeration (zero-allocation)
+            foreach (var (value, timestamp) in series.Data.ZipValues(_timestamps))
             {
                 float normalizedValue = (value - _minValue) / valueRange;
                 normalizedValue = Math.Clamp(normalizedValue, 0f, 1f);
