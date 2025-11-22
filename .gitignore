@@ -99,3 +99,12 @@ env/
 
 # Publish artifacts
 publish-aot/
+publish-output/
+publish-clean/
+
+# MCP/Playwright test artifacts
+.playwright-mcp/
+
+# Example app artifacts
+examples/**/.config/
+examples/**/Properties/PublishProfiles/
