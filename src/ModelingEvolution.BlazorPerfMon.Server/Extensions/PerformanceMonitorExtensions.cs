@@ -29,6 +29,7 @@ public static class PerformanceMonitorExtensions
         services.AddSingleton<RamCollector>();
         services.AddSingleton<NetworkCollector>();
         services.AddSingleton<DiskCollector>();
+        services.AddSingleton<DockerCollector>();
 
         // Register GPU collector based on configuration
         services.AddSingleton<IGpuCollector>(sp =>

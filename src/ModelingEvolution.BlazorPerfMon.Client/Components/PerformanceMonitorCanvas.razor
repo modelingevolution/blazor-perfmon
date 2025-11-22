@@ -157,7 +157,7 @@
         // Clear existing grid items
         _gridItems.Clear();
 
-        // Build grid items from layout
+        // Build grid items from layout with col-span support
         if (configuration.Layout != null && configuration.Layout.Length > 0)
         {
             int totalRows = configuration.Layout.Length;
@@ -167,23 +167,42 @@
                 var rowSources = configuration.Layout[row];
                 int colsInRow = rowSources.Length;
 
+                // Calculate total column units in this row (sum of all ColSpan values)
+                uint totalColUnits = 0;
+                foreach (var source in rowSources)
+                {
+                    totalColUnits += source.ColSpan;
+                }
+
+                // Track cumulative column offset
+                uint colOffset = 0;
+
                 for (int col = 0; col < rowSources.Length; col++)
                 {
                     var source = rowSources[col];
                     var chart = CreateChart(source);
 
-                    if (chart != null)
+                    if (chart == null)
                     {
-                        _gridItems.Add(new LayoutGridItem
-                        {
-                            Row = row,
-                            Col = col,
-                            TotalRows = totalRows,
-                            ColsInRow = colsInRow,
-                            Source = source,
-                            Chart = chart
-                        });
+                        throw new InvalidOperationException(
+                            $"Unknown chart type: '{source}'. Valid types: CPU, GPU, ComputeLoad, Network:<id>, Disk:<id>, Docker");
                     }
+
+                    _gridItems.Add(new LayoutGridItem
+                    {
+                        Row = row,
+                        Col = col,
+                        TotalRows = totalRows,
+                        ColsInRow = colsInRow,
+                        ColSpan = source.ColSpan,
+                        ColOffset = colOffset,
+                        TotalColUnits = totalColUnits,
+                        Source = source,
+                        Chart = chart
+                    });
+
+                    // Increment offset by this item's col-span
+                    colOffset += source.ColSpan;
                 }
             }
         }
@@ -204,6 +223,7 @@
                 new NetworkChart(source.Identifier, intervalSec, _timeWindowMs, _timestampAccessor!),
             "Disk" when !string.IsNullOrEmpty(source.Identifier) =>
                 new DiskChart(source.Identifier, intervalSec, _timeWindowMs, _timestampAccessor!),
+            "Docker" => new DockerContainersChart(),
             _ => null
         };
     }

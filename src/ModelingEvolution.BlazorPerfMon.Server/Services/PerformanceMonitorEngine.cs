@@ -17,6 +17,7 @@ public sealed class PerformanceMonitorEngine : IDisposable
     private readonly NetworkCollector _networkCollector;
     private readonly DiskCollector _diskCollector;
     private readonly IGpuCollector _gpuCollector;
+    private readonly DockerCollector _dockerCollector;
     private readonly MultiplexService _multiplexService;
     private readonly MonitorSettings _settings;
     private readonly ILogger<PerformanceMonitorEngine> _logger;
@@ -32,6 +33,7 @@ public sealed class PerformanceMonitorEngine : IDisposable
         NetworkCollector networkCollector,
         DiskCollector diskCollector,
         IGpuCollector gpuCollector,
+        DockerCollector dockerCollector,
         MultiplexService multiplexService,
         IOptions<MonitorSettings> settings,
         ILogger<PerformanceMonitorEngine> logger)
@@ -41,6 +43,7 @@ public sealed class PerformanceMonitorEngine : IDisposable
         _networkCollector = networkCollector;
         _diskCollector = diskCollector;
         _gpuCollector = gpuCollector;
+        _dockerCollector = dockerCollector;
         _multiplexService = multiplexService;
         _settings = settings.Value;
         _logger = logger;
@@ -95,7 +98,10 @@ public sealed class PerformanceMonitorEngine : IDisposable
                         var diskSw = Stopwatch.StartNew();
                         var diskTask = Task.Run(() => { var result = _diskCollector.Collect(); diskSw.Stop(); return result; }, cancellationToken);
 
-                        await Task.WhenAll(cpuTask, ramTask, gpuTask, networkTask, diskTask);
+                        var dockerSw = Stopwatch.StartNew();
+                        var dockerTask = Task.Run(() => { var result = _dockerCollector.Collect(); dockerSw.Stop(); return result; }, cancellationToken);
+
+                        await Task.WhenAll(cpuTask, ramTask, gpuTask, networkTask, diskTask, dockerTask);
 
                         stopwatch.Stop();
                         var collectionTimeMs = (uint)stopwatch.ElapsedMilliseconds;
@@ -103,16 +109,17 @@ public sealed class PerformanceMonitorEngine : IDisposable
                         // Log individual collector timings when total exceeds interval
                         if (collectionTimeMs > _settings.CollectionIntervalMs)
                         {
-                            _logger.LogWarning("Collection time {CollectionTimeMs}ms exceeds interval {IntervalMs}ms. CPU: {CpuMs}ms, RAM: {RamMs}ms, GPU: {GpuMs}ms, Network: {NetworkMs}ms, Disk: {DiskMs}ms",
+                            _logger.LogWarning("Collection time {CollectionTimeMs}ms exceeds interval {IntervalMs}ms. CPU: {CpuMs}ms, RAM: {RamMs}ms, GPU: {GpuMs}ms, Network: {NetworkMs}ms, Disk: {DiskMs}ms, Docker: {DockerMs}ms",
                                 collectionTimeMs, _settings.CollectionIntervalMs,
                                 cpuSw.ElapsedMilliseconds, ramSw.ElapsedMilliseconds, gpuSw.ElapsedMilliseconds,
-                                networkSw.ElapsedMilliseconds, diskSw.ElapsedMilliseconds);
+                                networkSw.ElapsedMilliseconds, diskSw.ElapsedMilliseconds, dockerSw.ElapsedMilliseconds);
                         }
 
                         // Post to pipeline with timestamp captured before collection
                         var postSuccess = _multiplexService.PostCpuGpuRamMetrics(cpuTask.Result, gpuTask.Result, ramTask.Result, timestampMs)
                                         & _multiplexService.PostNetworkMetrics(networkTask.Result, collectionTimeMs)
-                                        & _multiplexService.PostDiskMetrics(diskTask.Result);
+                                        & _multiplexService.PostDiskMetrics(diskTask.Result)
+                                        & _multiplexService.PostDockerMetrics(dockerTask.Result);
 
                         if (!postSuccess)
                             _logger.LogWarning("Backpressure detected: some metrics not posted");

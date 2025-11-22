@@ -5,7 +5,7 @@ namespace ModelingEvolution.BlazorPerfMon.Server.Services;
 
 /// <summary>
 /// TPL Dataflow pipeline for metrics multiplexing.
-/// Stage 4: Uses 3-way JoinBlock to combine (CPU+GPU+RAM), Network (with collection time), and Disk data.
+/// Stage 4: Uses nested JoinBlocks to combine (CPU+GPU+RAM), Network (with collection time), Disk, and Docker data.
 /// Tracks connected clients and fires events when first client connects or last client disconnects.
 /// </summary>
 public sealed class MultiplexService : IDisposable
@@ -13,8 +13,10 @@ public sealed class MultiplexService : IDisposable
     private readonly BufferBlock<(float[] CpuLoads, float[] GpuLoads, RamMetric Ram, uint TimestampMs)> _cpuGpuBuffer;
     private readonly BufferBlock<(NetworkMetric[] Metrics, uint CollectionTimeMs)> _networkBuffer;
     private readonly BufferBlock<DiskMetric[]> _diskBuffer;
-    private readonly JoinBlock<(float[], float[], RamMetric, uint), (NetworkMetric[], uint), DiskMetric[]> _joinBlock;
-    private readonly TransformBlock<Tuple<(float[], float[], RamMetric, uint), (NetworkMetric[], uint), DiskMetric[]>, byte[]> _serializeBlock;
+    private readonly BufferBlock<DockerContainerMetric[]> _dockerBuffer;
+    private readonly JoinBlock<(float[], float[], RamMetric, uint), (NetworkMetric[], uint), DiskMetric[]> _firstJoinBlock;
+    private readonly JoinBlock<Tuple<(float[], float[], RamMetric, uint), (NetworkMetric[], uint), DiskMetric[]>, DockerContainerMetric[]> _secondJoinBlock;
+    private readonly TransformBlock<Tuple<Tuple<(float[], float[], RamMetric, uint), (NetworkMetric[], uint), DiskMetric[]>, DockerContainerMetric[]>, byte[]> _serializeBlock;
     private readonly BroadcastBlock<byte[]> _broadcastBlock;
 
     private int _clientCount = 0;
@@ -31,7 +33,7 @@ public sealed class MultiplexService : IDisposable
 
     public MultiplexService()
     {
-        // Stage 4: Separate buffers for CPU+GPU+RAM (with timestamp), Network (with collection time), and Disk
+        // Stage 4: Separate buffers for CPU+GPU+RAM (with timestamp), Network (with collection time), Disk, and Docker
         _cpuGpuBuffer = new BufferBlock<(float[], float[], RamMetric, uint)>(new DataflowBlockOptions
         {
             BoundedCapacity = 2
@@ -47,17 +49,29 @@ public sealed class MultiplexService : IDisposable
             BoundedCapacity = 2
         });
 
-        // JoinBlock: Wait for CPU+GPU+RAM (with timestamp), Network (with collection time), and Disk data before proceeding
-        _joinBlock = new JoinBlock<(float[], float[], RamMetric, uint), (NetworkMetric[], uint), DiskMetric[]>(new GroupingDataflowBlockOptions
+        _dockerBuffer = new BufferBlock<DockerContainerMetric[]>(new DataflowBlockOptions
+        {
+            BoundedCapacity = 2
+        });
+
+        // First JoinBlock: Wait for CPU+GPU+RAM (with timestamp), Network (with collection time), and Disk
+        _firstJoinBlock = new JoinBlock<(float[], float[], RamMetric, uint), (NetworkMetric[], uint), DiskMetric[]>(new GroupingDataflowBlockOptions
+        {
+            BoundedCapacity = 2
+        });
+
+        // Second JoinBlock: Wait for first join result and Docker data
+        _secondJoinBlock = new JoinBlock<Tuple<(float[], float[], RamMetric, uint), (NetworkMetric[], uint), DiskMetric[]>, DockerContainerMetric[]>(new GroupingDataflowBlockOptions
         {
             BoundedCapacity = 2
         });
 
         // Transform block: Serialize combined data to MessagePack
-        _serializeBlock = new TransformBlock<Tuple<(float[], float[], RamMetric, uint), (NetworkMetric[], uint), DiskMetric[]>, byte[]>(
+        _serializeBlock = new TransformBlock<Tuple<Tuple<(float[], float[], RamMetric, uint), (NetworkMetric[], uint), DiskMetric[]>, DockerContainerMetric[]>, byte[]>(
             combinedData =>
             {
-                var (cpuGpuRamData, networkData, diskMetrics) = combinedData;
+                var (firstJoinResult, dockerMetrics) = combinedData;
+                var (cpuGpuRamData, networkData, diskMetrics) = firstJoinResult;
                 var (cpuLoads, gpuLoads, ram, timestampMs) = cpuGpuRamData;
                 var (networkMetrics, collectionTimeMs) = networkData;
 
@@ -81,6 +95,7 @@ public sealed class MultiplexService : IDisposable
                     },
                     DiskMetrics = diskMetrics,
                     NetworkMetrics = sharedNetworkMetrics,
+                    DockerContainers = dockerMetrics,
                     CollectionDurationMs = collectionTimeMs
                 };
 
@@ -95,11 +110,13 @@ public sealed class MultiplexService : IDisposable
         // Broadcast block: Send serialized data to all connected clients
         _broadcastBlock = new BroadcastBlock<byte[]>(bytes => bytes);
 
-        // Link pipeline: (CPU+GPU)/Network/Disk -> Join -> Serialize -> Broadcast
-        _cpuGpuBuffer.LinkTo(_joinBlock.Target1, new DataflowLinkOptions { PropagateCompletion = true });
-        _networkBuffer.LinkTo(_joinBlock.Target2, new DataflowLinkOptions { PropagateCompletion = true });
-        _diskBuffer.LinkTo(_joinBlock.Target3, new DataflowLinkOptions { PropagateCompletion = true });
-        _joinBlock.LinkTo(_serializeBlock, new DataflowLinkOptions { PropagateCompletion = true });
+        // Link pipeline: (CPU+GPU)/Network/Disk -> FirstJoin -> (FirstJoin result + Docker) -> SecondJoin -> Serialize -> Broadcast
+        _cpuGpuBuffer.LinkTo(_firstJoinBlock.Target1, new DataflowLinkOptions { PropagateCompletion = true });
+        _networkBuffer.LinkTo(_firstJoinBlock.Target2, new DataflowLinkOptions { PropagateCompletion = true });
+        _diskBuffer.LinkTo(_firstJoinBlock.Target3, new DataflowLinkOptions { PropagateCompletion = true });
+        _firstJoinBlock.LinkTo(_secondJoinBlock.Target1, new DataflowLinkOptions { PropagateCompletion = true });
+        _dockerBuffer.LinkTo(_secondJoinBlock.Target2, new DataflowLinkOptions { PropagateCompletion = true });
+        _secondJoinBlock.LinkTo(_serializeBlock, new DataflowLinkOptions { PropagateCompletion = true });
         _serializeBlock.LinkTo(_broadcastBlock, new DataflowLinkOptions { PropagateCompletion = true });
     }
 
@@ -128,6 +145,15 @@ public sealed class MultiplexService : IDisposable
     public bool PostDiskMetrics(DiskMetric[] diskMetrics)
     {
         return _diskBuffer.Post(diskMetrics);
+    }
+
+    /// <summary>
+    /// Post Docker container metrics to the pipeline.
+    /// Returns false if the buffer is full (backpressure).
+    /// </summary>
+    public bool PostDockerMetrics(DockerContainerMetric[] dockerMetrics)
+    {
+        return _dockerBuffer.Post(dockerMetrics);
     }
 
     /// <summary>
@@ -182,7 +208,9 @@ public sealed class MultiplexService : IDisposable
         _cpuGpuBuffer.Complete();
         _networkBuffer.Complete();
         _diskBuffer.Complete();
-        _joinBlock.Complete();
+        _dockerBuffer.Complete();
+        _firstJoinBlock.Complete();
+        _secondJoinBlock.Complete();
         _serializeBlock.Complete();
         _broadcastBlock.Complete();
     }

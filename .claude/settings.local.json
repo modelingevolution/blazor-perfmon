@@ -35,7 +35,10 @@
       "Bash(git rm:*)",
       "WebFetch(domain:www.nuget.org)",
       "Bash(tee:*)",
-      "Bash(xargs:*)"
+      "Bash(xargs:*)",
+      "Bash(timeout 10 tail:*)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Bash(timeout 15 dotnet run:*)"
     ],
     "deny": [],
     "ask": []

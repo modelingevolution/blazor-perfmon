@@ -30,6 +30,9 @@ public readonly record struct MetricSample
     [Key(5)]
     public DiskMetric[]? DiskMetrics { get; init; }
 
+    [Key(7)]
+    public DockerContainerMetric[]? DockerContainers { get; init; }
+
     /// <summary>
     /// How long it took to collect these metrics (duration in milliseconds).
     /// </summary>
