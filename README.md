@@ -74,6 +74,60 @@ Access at: `http://localhost:5000`
 
 WebSocket endpoint: `ws://localhost:5000/ws`
 
+## Using the Client Library
+
+### Blazor WebAssembly Setup
+
+To integrate the Performance Monitor client into your Blazor WASM application:
+
+1. **Install the NuGet package**:
+```bash
+dotnet add package ModelingEvolution.PerformanceMonitor.Client
+```
+
+2. **Register the client services** in `Program.cs`:
+```csharp
+using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
+using ModelingEvolution.BlazorPerfMon.Client.Extensions;
+
+var builder = WebAssemblyHostBuilder.CreateDefault(args);
+
+// Calculate WebSocket URL from base address
+string wsUrl = builder.HostEnvironment.BaseAddress
+    .Replace("http://", "ws://")
+    .Replace("https://", "wss://") + "ws";
+
+// Register Performance Monitor client
+builder.Services.AddPerformanceMonitorClient(wsUrl, dataPointsToKeep: 120);
+
+await builder.Build().RunAsync();
+```
+
+3. **Add the component** to your page:
+```razor
+@page "/"
+@using ModelingEvolution.BlazorPerfMon.Client.Components
+
+<PerformanceMonitorCanvas />
+```
+
+### Component Features
+
+- **Automatic reconnection**: Component handles WebSocket disconnections and reconnects automatically
+- **Component lifecycle**: Each component instance creates its own WebSocket connection and metrics store
+- **Disposal support**: Components can be disposed and recreated without issues
+- **Multiple instances**: Multiple monitor components can coexist in the same application
+
+### Component Parameters
+
+- `ServerUrl` (optional): Override the default WebSocket URL for this component instance
+- `ShowStatusIndicator` (default: true): Show/hide the connection status indicator (green/yellow/red dot)
+
+Example with custom parameters:
+```razor
+<PerformanceMonitorCanvas ServerUrl="ws://custom-server:5000/ws" ShowStatusIndicator="true" />
+```
+
 ## Implementation Details
 
 ### Metrics Collection
