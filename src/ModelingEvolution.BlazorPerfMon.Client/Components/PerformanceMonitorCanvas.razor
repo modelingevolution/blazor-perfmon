@@ -218,6 +218,7 @@
         {
             "CPU" when source.Identifier == null => new CpuBarChart((int)source.Count),
             "GPU" when source.Identifier == null => new GpuBarChart((int)source.Count),
+            "Temperature" when source.Identifier == null => new TemperatureBarChart((int)source.Count),
             "ComputeLoad" => new ComputeLoadChart(_timeWindowMs, _timestampAccessor!),
             "Network" when !string.IsNullOrEmpty(source.Identifier) =>
                 new NetworkChart(source.Identifier, intervalSec, _timeWindowMs, _timestampAccessor!),

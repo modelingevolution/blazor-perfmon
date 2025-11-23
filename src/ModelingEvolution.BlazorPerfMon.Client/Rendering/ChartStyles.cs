@@ -171,6 +171,75 @@ internal static class ChartStyles
         Style = SKPaintStyle.Fill
     };
 
+    // ===== Temperature Bar Styles =====
+
+    /// <summary>
+    /// Temperature bar paint - cool zone (below 50°C) - blue.
+    /// </summary>
+    public static readonly SKPaint TemperatureCool = new()
+    {
+        Color = new SKColor(100, 200, 255),
+        IsAntialias = true,
+        Style = SKPaintStyle.Fill
+    };
+
+    /// <summary>
+    /// Temperature bar paint - normal zone (50-60°C) - green.
+    /// </summary>
+    public static readonly SKPaint TemperatureNormal = new()
+    {
+        Color = ChartColors.Green,
+        IsAntialias = true,
+        Style = SKPaintStyle.Fill
+    };
+
+    /// <summary>
+    /// Temperature bar paint - warm zone (60-70°C) - yellow.
+    /// </summary>
+    public static readonly SKPaint TemperatureWarm = new()
+    {
+        Color = new SKColor(255, 255, 100),
+        IsAntialias = true,
+        Style = SKPaintStyle.Fill
+    };
+
+    /// <summary>
+    /// Temperature bar paint - hot zone (70-85°C) - orange.
+    /// </summary>
+    public static readonly SKPaint TemperatureHot = new()
+    {
+        Color = ChartColors.Orange,
+        IsAntialias = true,
+        Style = SKPaintStyle.Fill
+    };
+
+    /// <summary>
+    /// Temperature bar paint - critical zone (above 85°C) - red.
+    /// </summary>
+    public static readonly SKPaint TemperatureCritical = new()
+    {
+        Color = ChartColors.LightRed,
+        IsAntialias = true,
+        Style = SKPaintStyle.Fill
+    };
+
+    /// <summary>
+    /// Maps temperature value to appropriate color paint.
+    /// </summary>
+    /// <param name="tempCelsius">Temperature in Celsius</param>
+    /// <returns>SKPaint with appropriate color for the temperature zone</returns>
+    public static SKPaint GetTemperaturePaint(float tempCelsius)
+    {
+        return tempCelsius switch
+        {
+            < 50f => TemperatureCool,
+            < 60f => TemperatureNormal,
+            < 70f => TemperatureWarm,
+            < 85f => TemperatureHot,
+            _ => TemperatureCritical
+        };
+    }
+
     // ===== Line Chart Styles =====
 
     /// <summary>

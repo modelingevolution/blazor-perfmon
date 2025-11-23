@@ -1,5 +1,6 @@
 using System.Threading.Tasks.Dataflow;
 using MessagePack;
+using ModelingEvolution.BlazorPerfMon.Server.Collectors;
 
 namespace ModelingEvolution.BlazorPerfMon.Server.Services;
 
@@ -18,6 +19,7 @@ internal sealed class MultiplexService : IDisposable
     private readonly JoinBlock<Tuple<(float[], float[], RamMetric, uint), (NetworkMetric[], uint), DiskMetric[]>, DockerContainerMetric[]> _secondJoinBlock;
     private readonly TransformBlock<Tuple<Tuple<(float[], float[], RamMetric, uint), (NetworkMetric[], uint), DiskMetric[]>, DockerContainerMetric[]>, byte[]> _serializeBlock;
     private readonly BroadcastBlock<byte[]> _broadcastBlock;
+    private readonly IGpuCollector? _gpuCollector;
 
     private int _clientCount = 0;
 
@@ -31,8 +33,10 @@ internal sealed class MultiplexService : IDisposable
     /// </summary>
     public event Action? LastClientDisconnected;
 
-    public MultiplexService()
+    public MultiplexService(IGpuCollector? gpuCollector = null)
     {
+        _gpuCollector = gpuCollector;
+
         // Stage 4: Separate buffers for CPU+GPU+RAM (with timestamp), Network (with collection time), Disk, and Docker
         _cpuGpuBuffer = new BufferBlock<(float[], float[], RamMetric, uint)>(new DataflowBlockOptions
         {
@@ -83,6 +87,18 @@ internal sealed class MultiplexService : IDisposable
                     TxBytes = n.TxBytes
                 }).ToArray();
 
+                // Extract temperatures from Tegra GPU collector if available
+                TemperatureMetric[]? temperatures = null;
+                if (_gpuCollector is NvTegraGpuCollector tegraCollector && tegraCollector.LatestStats is not null)
+                {
+                    var tegraStats = tegraCollector.LatestStats.Value;
+                    temperatures = tegraStats.Temperatures.Select(t => new TemperatureMetric
+                    {
+                        Sensor = t.Sensor,
+                        TempCelsius = t.TempCelsius
+                    }).ToArray();
+                }
+
                 var sample = new MetricSample
                 {
                     CreatedAt = timestampMs,
@@ -98,7 +114,8 @@ internal sealed class MultiplexService : IDisposable
                     DockerContainers = dockerMetrics,
                     CollectionDurationMs = collectionTimeMs,
                     CpuAverage = CalculateAverage(cpuLoads),
-                    GpuAverage = CalculateAverage(gpuLoads)
+                    GpuAverage = CalculateAverage(gpuLoads),
+                    Temperatures = temperatures
                 };
 
                 return MessagePackSerializer.Serialize(sample);

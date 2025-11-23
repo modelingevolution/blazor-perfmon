@@ -13,6 +13,11 @@ public sealed class BarChart : ChartBase
     private int _labelCount = 0;
     private IEnumerable<float> _values = Enumerable.Empty<float>();
     private int _valueCount = 0;
+    private float _minScale;
+    private float _maxScale = 100f;
+    private string _units = "%";
+    private string _valueFormat = "{0:F1}";
+    private Func<float, SKPaint> _colorMapper = _ => ChartStyles.BarFill;
 
     /// <summary>
     /// Sets the data for the bar chart.
@@ -21,15 +26,35 @@ public sealed class BarChart : ChartBase
     /// <param name="title">Chart title</param>
     /// <param name="labels">Labels for each bar</param>
     /// <param name="labelCount">Number of labels</param>
-    /// <param name="values">Values for each bar (0-100)</param>
+    /// <param name="values">Values for each bar</param>
     /// <param name="valueCount">Number of values</param>
-    public void SetData(string title, IEnumerable<string> labels, int labelCount, IEnumerable<float> values, int valueCount)
+    /// <param name="minScale">Minimum value for scale (default 0)</param>
+    /// <param name="maxScale">Maximum value for scale (default 100)</param>
+    /// <param name="units">Display units (default "%")</param>
+    /// <param name="valueFormat">Format string for values (default "{0:F1}")</param>
+    /// <param name="colorMapper">Optional function to map values to paint colors</param>
+    public void SetData(
+        string title,
+        IEnumerable<string> labels,
+        int labelCount,
+        IEnumerable<float> values,
+        int valueCount,
+        float minScale = 0f,
+        float maxScale = 100f,
+        string units = "%",
+        string valueFormat = "{0:F1}",
+        Func<float, SKPaint>? colorMapper = null)
     {
         _title = title;
         _labels = labels;
         _labelCount = labelCount;
         _values = values;
         _valueCount = valueCount;
+        _minScale = minScale;
+        _maxScale = maxScale;
+        _units = units;
+        _valueFormat = valueFormat;
+        _colorMapper = colorMapper ?? (_ => ChartStyles.BarFill);
     }
 
     protected override void RenderContent(SKCanvas canvas)
@@ -66,26 +91,27 @@ public sealed class BarChart : ChartBase
         foreach (var (value, label) in _values.ZipValues(_labels))
         {
             float y = barAreaTop + i * (barHeight + barSpacing);
-            float clampedValue = Math.Clamp(value, 0f, 100f);
+            float clampedValue = Math.Clamp(value, _minScale, _maxScale);
+            float fillRatio = (clampedValue - _minScale) / (_maxScale - _minScale);
 
             // Draw bar background
             var barBgRect = new SKRect(barStartX, y, barStartX + barWidth, y + barHeight);
             canvas.DrawRect(barBgRect, ChartStyles.BarBackground);
 
-            // Draw bar foreground (green)
-            float fillWidth = barWidth * (clampedValue / 100f);
+            // Draw bar foreground with color from mapper
+            float fillWidth = barWidth * fillRatio;
             if (fillWidth > 0)
             {
                 var barRect = new SKRect(barStartX, y, barStartX + fillWidth, y + barHeight);
-                canvas.DrawRect(barRect, ChartStyles.BarFill);
+                canvas.DrawRect(barRect, _colorMapper(value));
             }
 
             // Draw label
             canvas.DrawText(label, bounds.Left + 20, y + barHeight / 2 + 5, TextFont, TextPaint);
 
-            // Draw percentage
-            string percentage = $"{clampedValue:F1}%";
-            canvas.DrawText(percentage, barStartX + barWidth + 10, y + barHeight / 2 + 5, TextFont, TextPaint);
+            // Draw value with units
+            string valueText = string.Format(_valueFormat, clampedValue) + _units;
+            canvas.DrawText(valueText, barStartX + barWidth + 10, y + barHeight / 2 + 5, TextFont, TextPaint);
 
             i++;
         }

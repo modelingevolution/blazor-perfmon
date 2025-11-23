@@ -49,7 +49,11 @@ public static class PerformanceMonitorExtensions
         });
 
         // Register services
-        services.AddSingleton<MultiplexService>();
+        services.AddSingleton<MultiplexService>(sp =>
+        {
+            var gpuCollector = sp.GetRequiredService<IGpuCollector>();
+            return new MultiplexService(gpuCollector);
+        });
         services.AddSingleton<MetricsConfigurationBuilder>();
         services.AddSingleton<WebSocketService>();
         services.AddSingleton<PerformanceMonitorEngine>();

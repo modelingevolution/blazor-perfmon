@@ -75,4 +75,11 @@ public readonly record struct MetricSample
     /// </summary>
     [Key(9)]
     public float GpuAverage { get; init; }
+
+    /// <summary>
+    /// Temperature sensor readings (Celsius).
+    /// Null if no temperature sensors are available.
+    /// </summary>
+    [Key(10)]
+    public TemperatureMetric[]? Temperatures { get; init; }
 }

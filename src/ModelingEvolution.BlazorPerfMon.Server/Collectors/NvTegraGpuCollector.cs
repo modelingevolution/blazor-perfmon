@@ -1,19 +1,17 @@
 using System.Diagnostics;
-using System.Text.RegularExpressions;
 
 namespace ModelingEvolution.BlazorPerfMon.Server.Collectors;
 
 /// <summary>
 /// GPU collector for NVIDIA Jetson platforms using tegrastats.
 /// Supports Jetson Orin NX, AGX Orin, and other Tegra-based devices.
+/// Parses complete tegrastats output including RAM, CPU, temperatures, and power metrics.
 /// </summary>
 internal sealed class NvTegraGpuCollector : IGpuCollector
 {
     private readonly ILogger<NvTegraGpuCollector> _logger;
     private Process? _tegrastatsProcess;
-    private float _latestGpuUtil = 0f;
-    private readonly object _lock = new();
-    private static readonly Regex GpuUtilRegex = new(@"GR3D_FREQ\s+(\d+)%", RegexOptions.Compiled);
+    private TegraStatsLine? _latestStats;
 
     public NvTegraGpuCollector(ILogger<NvTegraGpuCollector> logger)
     {
@@ -22,8 +20,13 @@ internal sealed class NvTegraGpuCollector : IGpuCollector
     }
 
     /// <summary>
-    /// Starts tegrastats process in background to continuously monitor GPU.
-    /// tegrastats output format: "GR3D_FREQ 45%"
+    /// Gets the latest complete tegrastats data.
+    /// Useful for accessing additional metrics beyond GPU utilization.
+    /// </summary>
+    public TegraStatsLine? LatestStats => _latestStats;
+
+    /// <summary>
+    /// Starts tegrastats process in background to continuously monitor all system metrics.
     /// </summary>
     private void StartTegrastats()
     {
@@ -64,21 +67,20 @@ internal sealed class NvTegraGpuCollector : IGpuCollector
     }
 
     /// <summary>
-    /// Parses tegrastats output line to extract GPU utilization.
-    /// Example: "RAM 1234/5678MB (lfb 100x4MB) GR3D_FREQ 45%"
+    /// Parses complete tegrastats output line including RAM, SWAP, CPU, GPU, temperatures, and power.
+    /// Example: "11-23-2025 22:47:56 RAM 1729/15657MB (lfb 8x4MB) SWAP 0/7828MB (cached 0MB) CPU [1%@1420,2%@1420,...] GR3D_FREQ 0% cv0@43.562C ... VDD_IN 6120mW/6120mW ..."
     /// </summary>
     private void ParseTegrastatsLine(string line)
     {
         try
         {
-            // Match pattern: GR3D_FREQ 45% (using pre-compiled regex)
-            var match = GpuUtilRegex.Match(line);
-            if (match.Success && float.TryParse(match.Groups[1].Value, out float util))
+            if (TegraStatsLine.TryParse(line, null, out var stats))
             {
-                lock (_lock)
-                {
-                    _latestGpuUtil = Math.Clamp(util, 0f, 100f);
-                }
+                _latestStats = stats;
+            }
+            else
+            {
+                _logger.LogWarning("Failed to parse tegrastats line: {Line}", line);
             }
         }
         catch (Exception ex)
@@ -90,14 +92,13 @@ internal sealed class NvTegraGpuCollector : IGpuCollector
     /// <summary>
     /// Returns the latest GPU utilization from tegrastats.
     /// Currently returns single-element array for GR3D_FREQ.
-    /// TODO: Extend to support multiple GPUs on Tegra platforms with multiple GPU clusters.
     /// </summary>
     public float[] Collect()
     {
-        lock (_lock)
-        {
-            return new float[] { _latestGpuUtil };
-        }
+        var stats = _latestStats;
+        return stats.HasValue
+            ? [stats.Value.GpuUtilizationPercent]
+            : [0f];
     }
 
     ~NvTegraGpuCollector()
