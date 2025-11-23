@@ -8,32 +8,11 @@ namespace ModelingEvolution.BlazorPerfMon.Client.Rendering;
 /// </summary>
 public sealed class BarChart : ChartBase
 {
-    private readonly SKPaint _barPaint;
-    private readonly SKPaint _barBackgroundPaint;
-    private static readonly SKColor BarColor = new SKColor(100, 255, 100); // Green
-
     private string _title = "Bar Chart";
     private IEnumerable<string> _labels = Enumerable.Empty<string>();
     private int _labelCount = 0;
     private IEnumerable<float> _values = Enumerable.Empty<float>();
     private int _valueCount = 0;
-
-    public BarChart()
-    {
-        _barPaint = new SKPaint
-        {
-            Color = BarColor,
-            IsAntialias = true,
-            Style = SKPaintStyle.Fill
-        };
-
-        _barBackgroundPaint = new SKPaint
-        {
-            Color = new SKColor(50, 50, 50),
-            IsAntialias = false,
-            Style = SKPaintStyle.Fill
-        };
-    }
 
     /// <summary>
     /// Sets the data for the bar chart.
@@ -91,14 +70,14 @@ public sealed class BarChart : ChartBase
 
             // Draw bar background
             var barBgRect = new SKRect(barStartX, y, barStartX + barWidth, y + barHeight);
-            canvas.DrawRect(barBgRect, _barBackgroundPaint);
+            canvas.DrawRect(barBgRect, ChartStyles.BarBackground);
 
             // Draw bar foreground (green)
             float fillWidth = barWidth * (clampedValue / 100f);
             if (fillWidth > 0)
             {
                 var barRect = new SKRect(barStartX, y, barStartX + fillWidth, y + barHeight);
-                canvas.DrawRect(barRect, _barPaint);
+                canvas.DrawRect(barRect, ChartStyles.BarFill);
             }
 
             // Draw label
@@ -114,8 +93,7 @@ public sealed class BarChart : ChartBase
 
     public override void Dispose()
     {
-        _barPaint.Dispose();
-        _barBackgroundPaint.Dispose();
+        // Uses shared static paints from ChartStyles - no disposal needed
         base.Dispose();
     }
 }

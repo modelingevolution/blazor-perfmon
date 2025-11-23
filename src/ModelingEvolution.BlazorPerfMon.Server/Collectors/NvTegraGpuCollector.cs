@@ -13,6 +13,7 @@ internal sealed class NvTegraGpuCollector : IGpuCollector
     private Process? _tegrastatsProcess;
     private float _latestGpuUtil = 0f;
     private readonly object _lock = new();
+    private static readonly Regex GpuUtilRegex = new(@"GR3D_FREQ\s+(\d+)%", RegexOptions.Compiled);
 
     public NvTegraGpuCollector(ILogger<NvTegraGpuCollector> logger)
     {
@@ -44,18 +45,15 @@ internal sealed class NvTegraGpuCollector : IGpuCollector
                 return;
             }
 
-            // Read output asynchronously
-            Task.Run(() =>
+            // Use asynchronous event-based reading (non-blocking)
+            _tegrastatsProcess.OutputDataReceived += (sender, e) =>
             {
-                while (_tegrastatsProcess != null && !_tegrastatsProcess.HasExited)
+                if (!string.IsNullOrEmpty(e.Data))
                 {
-                    var line = _tegrastatsProcess.StandardOutput.ReadLine();
-                    if (line != null)
-                    {
-                        ParseTegrastatsLine(line);
-                    }
+                    ParseTegrastatsLine(e.Data);
                 }
-            });
+            };
+            _tegrastatsProcess.BeginOutputReadLine();
 
             _logger.LogInformation("tegrastats monitoring started");
         }
@@ -73,8 +71,8 @@ internal sealed class NvTegraGpuCollector : IGpuCollector
     {
         try
         {
-            // Match pattern: GR3D_FREQ 45%
-            var match = Regex.Match(line, @"GR3D_FREQ\s+(\d+)%");
+            // Match pattern: GR3D_FREQ 45% (using pre-compiled regex)
+            var match = GpuUtilRegex.Match(line);
             if (match.Success && float.TryParse(match.Groups[1].Value, out float util))
             {
                 lock (_lock)

@@ -8,11 +8,30 @@ namespace ModelingEvolution.BlazorPerfMon.Client.Rendering;
 /// </summary>
 public abstract class ChartBase : IDisposable
 {
-    protected readonly SKPaint TextPaint;
-    protected readonly SKFont TextFont;
-    protected readonly SKFont TitleFont;
-    protected readonly SKPaint BackgroundPaint;
-    protected readonly SKPaint GridPaint;
+    /// <summary>
+    /// Unified text paint - use ChartStyles.Text.
+    /// </summary>
+    protected readonly SKPaint TextPaint = ChartStyles.Text;
+
+    /// <summary>
+    /// Unified label font - use ChartStyles.LabelFont.
+    /// </summary>
+    protected readonly SKFont TextFont = ChartStyles.LabelFont;
+
+    /// <summary>
+    /// Unified title font - use ChartStyles.TitleFont.
+    /// </summary>
+    protected readonly SKFont TitleFont = ChartStyles.TitleFont;
+
+    /// <summary>
+    /// Unified background paint - use ChartStyles.Background.
+    /// </summary>
+    protected readonly SKPaint BackgroundPaint = ChartStyles.Background;
+
+    /// <summary>
+    /// Unified grid paint - use ChartStyles.Grid.
+    /// </summary>
+    protected readonly SKPaint GridPaint = ChartStyles.Grid;
 
     /// <summary>
     /// Location of the chart on the canvas (top-left corner).
@@ -28,39 +47,6 @@ public abstract class ChartBase : IDisposable
     /// Gets the bounds rectangle for this chart.
     /// </summary>
     public SKRect Bounds => new SKRect(Location.X, Location.Y, Location.X + Size.Width, Location.Y + Size.Height);
-
-    protected ChartBase()
-    {
-        TextFont = new SKFont
-        {
-            Size = 16f
-        };
-
-        TitleFont = new SKFont
-        {
-            Size = 24f
-        };
-
-        TextPaint = new SKPaint
-        {
-            Color = SKColors.White,
-            IsAntialias = true
-        };
-
-        BackgroundPaint = new SKPaint
-        {
-            Color = new SKColor(26, 26, 26), // #1a1a1a
-            Style = SKPaintStyle.Fill
-        };
-
-        GridPaint = new SKPaint
-        {
-            Color = new SKColor(70, 70, 70),
-            StrokeWidth = 1f,
-            IsAntialias = false,
-            Style = SKPaintStyle.Stroke
-        };
-    }
 
     /// <summary>
     /// Renders the chart on the given canvas.
@@ -91,10 +77,7 @@ public abstract class ChartBase : IDisposable
 
     public virtual void Dispose()
     {
-        TextPaint.Dispose();
-        TextFont.Dispose();
-        TitleFont.Dispose();
-        BackgroundPaint.Dispose();
-        GridPaint.Dispose();
+        // ChartBase now uses shared static paints from ChartStyles
+        // No disposal needed for shared resources
     }
 }
