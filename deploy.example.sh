@@ -15,7 +15,7 @@ echo ""
 
 # Step 1: Build Docker image
 echo "[1/4] Building Docker image..."
-./build-docker.sh --arm64-only --load
+./build.example.sh --arm64-only --load
 
 # Step 2: Stop old container if running
 echo ""
