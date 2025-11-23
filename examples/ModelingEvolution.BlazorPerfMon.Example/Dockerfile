@@ -45,12 +45,13 @@ FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
 ARG TARGETARCH
 WORKDIR /app
 
-# Install dependencies for system monitoring
+# Install dependencies for system monitoring and healthcheck
 # Install nvidia-smi for GPU monitoring (optional - will gracefully degrade if not available)
 # Install docker CLI for Docker container monitoring (optional)
 RUN apt-get update && apt-get install -y \
     procps \
     sysstat \
+    curl \
     && rm -rf /var/lib/apt/lists/*
 
 # Optional: Install NVIDIA drivers and tools for GPU monitoring
@@ -62,18 +63,20 @@ RUN apt-get update && apt-get install -y \
 # Copy published app
 COPY --from=build /app/publish .
 
-# Expose port
+# Expose ports (default 8080, can be overridden by appsettings)
 EXPOSE 8080
+EXPOSE 5000
 
 # Set environment variables
-ENV ASPNETCORE_URLS=http://+:8080
+# Note: ASPNETCORE_URLS removed - controlled by appsettings.json
 ENV ASPNETCORE_ENVIRONMENT=Production
 
 # Run as root for access to tegrastats and system monitoring
 # Note: This is required for Tegra GPU monitoring and Docker socket access
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8080/health || exit 1
+# Health check - checks root endpoint instead of /health
+# Uses ${PORT:-8080} to default to 8080 if PORT env var not set
+HEALTHCHECK --interval=30s --timeout=3s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:${PORT:-5000}/ || exit 1
 
 ENTRYPOINT ["dotnet", "ModelingEvolution.BlazorPerfMon.Example.dll"]
