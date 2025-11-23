@@ -1,5 +1,9 @@
 # Blazor Performance Monitor
 
+[![NuGet Server](https://img.shields.io/nuget/v/ModelingEvolution.PerformanceMonitor.Server.svg)](https://www.nuget.org/packages/ModelingEvolution.PerformanceMonitor.Server/)
+[![NuGet Client](https://img.shields.io/nuget/v/ModelingEvolution.PerformanceMonitor.Client.svg)](https://www.nuget.org/packages/ModelingEvolution.PerformanceMonitor.Client/)
+[![NuGet Shared](https://img.shields.io/nuget/v/ModelingEvolution.PerformanceMonitor.Shared.svg)](https://www.nuget.org/packages/ModelingEvolution.PerformanceMonitor.Shared/)
+
 Real-time comprehensive performance monitoring system with Blazor WebAssembly frontend and SkiaSharp rendering.
 
 ## Current Status: Multi-Metric Monitoring System ✓
@@ -8,14 +12,18 @@ Real-time comprehensive performance monitoring system with Blazor WebAssembly fr
 
 - ✅ CPU monitoring (multi-core bar charts and time-series)
 - ✅ GPU monitoring (NVIDIA multi-GPU support with bar charts)
+- ✅ **NVIDIA Jetson Tegra support** (tegrastats-based monitoring)
+- ✅ **Temperature monitoring** (multi-sensor visualization with min/max tracking)
 - ✅ Network monitoring (multi-interface RX/TX tracking)
 - ✅ Disk I/O monitoring (read/write operations)
-- ✅ Docker container monitoring (CPU % and memory usage)
+- ✅ Docker container monitoring (CPU % and memory usage with unified colors)
 - ✅ RAM monitoring with time-series visualization
+- ✅ **Client-server timestamp synchronization** (automatic clock skew correction)
 - ✅ WebSocket streaming with MessagePack serialization
 - ✅ Blazor WASM frontend with SkiaSharp hardware-accelerated rendering
 - ✅ Immutable circular buffers for thread-safe data storage
 - ✅ Auto-reconnect on disconnect
+- ✅ **Unified color scheme** across all charts (RAM: blue, CPU: green)
 
 ## Architecture
 
