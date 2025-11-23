@@ -254,20 +254,20 @@ The Layout property defines how charts are arranged in a responsive grid. Each r
 
 **Chart Specification Format:**
 ```
-ChartType[:Parameter]/Height[|col-span:Width]
+ChartType[:Identifier]/Count[|col-span:N]
 ```
 
 **Components:**
 - `ChartType`: Type of chart (CPU, GPU, RAM, Network, Disk, Docker, ComputeLoad, Temperature)
-- `:Parameter`: Optional parameter (e.g., network interface, disk device)
-- `/Height`: Chart height in grid units
-- `|col-span:Width`: Optional column span for proportional width (default: 1)
+- `:Identifier`: Optional identifier for the specific instance (e.g., network interface name, disk device)
+- `/Count`: Number of data points for this metric (e.g., 16 CPU cores, 2 GPUs)
+- `|col-span:N`: Optional column span for proportional width (default: 1, range: 1-12)
 
 **Examples:**
-- `"CPU/8"` - CPU chart with height 8, width 1 (spans 1 column)
-- `"Network:eth0/3"` - Network chart for eth0 interface, height 3
-- `"ComputeLoad/3|col-span:2"` - Compute load chart, height 3, spans 2 columns
-- `"Temperature/9|col-span:5"` - Temperature chart, height 9, spans 5 columns
+- `"CPU/8"` - CPU chart with 8 cores, spans 1 column
+- `"Network:eth0/3"` - Network chart for eth0 interface with 3 data points
+- `"ComputeLoad/3|col-span:2"` - Compute load chart with 3 data points, spans 2 columns
+- `"Temperature/9|col-span:5"` - Temperature chart with 9 sensors, spans 5 columns
 
 **Layout Calculation:**
 - Each row's total width = sum of all col-span values in that row
