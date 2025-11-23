@@ -62,19 +62,15 @@ RUN apt-get update && apt-get install -y \
 # Copy published app
 COPY --from=build /app/publish .
 
-# Create non-root user for security
-RUN groupadd -r perfmon && useradd --no-log-init -r -g perfmon perfmon
-RUN chown -R perfmon:perfmon /app
-
 # Expose port
 EXPOSE 8080
-
-# Switch to non-root user
-USER perfmon
 
 # Set environment variables
 ENV ASPNETCORE_URLS=http://+:8080
 ENV ASPNETCORE_ENVIRONMENT=Production
+
+# Run as root for access to tegrastats and system monitoring
+# Note: This is required for Tegra GPU monitoring and Docker socket access
 
 # Health check
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
