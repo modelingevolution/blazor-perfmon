@@ -240,10 +240,14 @@
 
     private void OnConnectionStateChanged(bool isConnected)
     {
-        _isConnected = isConnected;
+        InvokeAsync(() =>
+        {
+            _isConnected = isConnected;
 
-        // Update status class (render loop will pick up changes)
-        _currentStatusClass = CalculateStatusClass();
+            // Update status class and trigger re-render
+            _currentStatusClass = CalculateStatusClass();
+            StateHasChanged();
+        });
     }
 
     private void OnMetricsUpdated()

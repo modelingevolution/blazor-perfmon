@@ -26,8 +26,8 @@ else
 
 // Configure middleware
 app.UseRouting();
-// Antiforgery not needed for WebSocket-only metrics application
-// app.UseAntiforgery();
+// Antiforgery required in .NET 10 for Blazor interactive components
+app.UseAntiforgery();
 
 // Map Performance Monitor WebSocket endpoint
 app.MapPerformanceMonitorEndpoint();
