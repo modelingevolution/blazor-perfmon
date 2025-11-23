@@ -50,7 +50,7 @@ if [ -z "$APPSETTINGS_PATH" ]; then
 fi
 
 # Run container in background
-APPSETTINGS_PATH="$APPSETTINGS_PATH" ./run.sh &
+APPSETTINGS_PATH="$APPSETTINGS_PATH" ./run.example.sh &
 RUN_PID=$!
 
 # Wait for container to start
