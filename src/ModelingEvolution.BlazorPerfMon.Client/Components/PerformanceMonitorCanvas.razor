@@ -8,6 +8,7 @@
 @using Microsoft.AspNetCore.Components.Web
 @using ModelingEvolution
 @implements IAsyncDisposable
+@inject PerformanceMonitorClientOptions ClientOptions
 
 <div class="monitor-container">
     <div class="status-circle @GetStatusClass()"></div>
@@ -56,13 +57,14 @@
 </style>
 
 @code {
-    [Inject] private WebSocketClient WebSocketClient { get; set; } = default!;
-    [Inject] private MetricsStore MetricsStore { get; set; } = default!;
-
     /// <summary>
-    /// WebSocket server URL to connect to. If null, uses the default from WebSocketClient configuration.
+    /// WebSocket server URL to connect to. If null, uses the default from configuration.
     /// </summary>
     [Parameter] public string? ServerUrl { get; set; }
+
+    // Component-owned service instances (created and disposed by this component)
+    private WebSocketClient? WebSocketClient { get; set; }
+    private MetricsStore? MetricsStore { get; set; }
 
     /// <summary>
     /// Whether to show the connection status indicator (default: true).
@@ -93,6 +95,13 @@
 
     protected override async Task OnInitializedAsync()
     {
+        // Create component-owned service instances
+        // This allows proper disposal and recreation of components
+        string wsUrl = ServerUrl ?? ClientOptions.WebSocketUrl ?? throw new InvalidOperationException("WebSocket URL not configured");
+
+        MetricsStore = new MetricsStore(intervals: ClientOptions.DataPointsToKeep);
+        WebSocketClient = new WebSocketClient(wsUrl);
+
         // Subscribe to WebSocket events
         WebSocketClient.OnConfigurationReceived += OnConfigurationReceived;
         WebSocketClient.OnMetricsReceived += OnMetricsReceived;
@@ -232,7 +241,7 @@
 
     private void OnMetricsReceived(MetricSample sample)
     {
-        MetricsStore.AddSample(sample);
+        MetricsStore?.AddSample(sample);
         _latestCollectionTimeMs = sample.CollectionDurationMs;
 
         // Update status class (render loop will pick up changes)
@@ -273,8 +282,8 @@
 
         var bounds = new SKRect(0, 0, e.Info.Width, e.Info.Height);
 
-        // Wait for configuration before rendering
-        if (_configuration == null || _gridItems.Count == 0)
+        // Wait for configuration and MetricsStore before rendering
+        if (_configuration == null || _gridItems.Count == 0 || MetricsStore == null)
         {
             return;
         }

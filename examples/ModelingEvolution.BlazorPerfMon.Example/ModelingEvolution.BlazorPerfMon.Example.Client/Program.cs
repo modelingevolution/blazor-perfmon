@@ -1,20 +1,14 @@
 using Microsoft.AspNetCore.Components.WebAssembly.Hosting;
-using ModelingEvolution.BlazorPerfMon.Client.Services;
-using ModelingEvolution.BlazorPerfMon.Client.Models;
+using ModelingEvolution.BlazorPerfMon.Client.Extensions;
 
 var builder = WebAssemblyHostBuilder.CreateDefault(args);
 
-// Configure settings
-builder.Services.Configure<MonitorSettings>(
-    builder.Configuration.GetSection("MonitorSettings"));
+// Calculate WebSocket URL from base address
+string wsUrl = builder.HostEnvironment.BaseAddress
+    .Replace("http://", "ws://")
+    .Replace("https://", "wss://") + "ws";
 
-// Register services as singletons
-builder.Services.AddSingleton<MetricsStore>(sp => new MetricsStore(intervals: 120)); // 60 seconds: 120 intervals × 500ms
-
-// WebSocket URL configuration
-string wsUrl = builder.HostEnvironment.BaseAddress.Replace("http://", "ws://").Replace("https://", "wss://") + "ws";
-builder.Services.AddSingleton(sp => new WebSocketClient(wsUrl));
-
-Console.WriteLine($"ModelingEvolution.BlazorPerfMon.Client initialized. WebSocket URL: {wsUrl}");
+// Add Performance Monitor client services (component creates its own service instances for proper disposal)
+builder.Services.AddPerformanceMonitorClient(wsUrl, dataPointsToKeep: 120);
 
 await builder.Build().RunAsync();
