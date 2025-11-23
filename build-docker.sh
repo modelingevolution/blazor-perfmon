@@ -91,9 +91,9 @@ if [ "$LOAD" = true ] && [[ "$PLATFORMS" == *","* ]]; then
     exit 1
 fi
 
-# Navigate to repository root
+# Navigate to repository root (script is at root)
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-REPO_ROOT="$(cd "$SCRIPT_DIR/../.." && pwd)"
+REPO_ROOT="$SCRIPT_DIR"
 cd "$REPO_ROOT"
 
 echo -e "${BLUE}╔════════════════════════════════════════════════════════════════╗${NC}"
