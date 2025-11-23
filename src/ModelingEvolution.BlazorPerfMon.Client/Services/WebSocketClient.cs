@@ -15,6 +15,7 @@ public sealed class WebSocketClient : IAsyncDisposable
     private CancellationTokenSource? _cts;
     private Task? _receiveTask;
     private bool _isDisposed;
+    private long _timeAdjustmentMs = 0;
 
     /// <summary>
     /// Event fired when configuration snapshot is received (first message).
@@ -44,6 +45,37 @@ public sealed class WebSocketClient : IAsyncDisposable
     /// Gets whether the WebSocket is currently connected.
     /// </summary>
     public bool IsConnected => _webSocket?.State == WebSocketState.Open;
+
+    /// <summary>
+    /// Adjusts sample timestamp to account for clock differences between server and browser.
+    /// If the difference is less than 500ms and positive, the sample is returned unchanged.
+    /// Otherwise, calculates a new adjustment based on the original server timestamp.
+    /// </summary>
+    /// <param name="sample">Original sample with server timestamp</param>
+    /// <returns>Sample with adjusted timestamp</returns>
+    private MetricSample AdjustSampleTimestamp(MetricSample sample)
+    {
+        // Get browser time in milliseconds since epoch
+        long browserTimeMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
+        long serverTimeMs = sample.CreatedAt;
+
+        // Calculate difference: browser time - server time
+        long differenceMs = browserTimeMs - serverTimeMs;
+
+        // If difference is positive and < 500ms, accept as-is
+        if (differenceMs >= 0 && differenceMs < 500)
+        {
+            return sample;
+        }
+
+        // Otherwise, calculate new adjustment based on original server timestamp
+        _timeAdjustmentMs = browserTimeMs - serverTimeMs;
+
+        // Apply adjustment to create new sample with corrected timestamp
+        uint adjustedTimestamp = (uint)(serverTimeMs + _timeAdjustmentMs);
+
+        return sample with { CreatedAt = adjustedTimestamp };
+    }
 
     /// <summary>
     /// Start the WebSocket connection with automatic reconnection.
@@ -116,6 +148,7 @@ public sealed class WebSocketClient : IAsyncDisposable
                                 {
                                     // Subsequent messages are metrics samples
                                     var sample = MessagePackSerializer.Deserialize<MetricSample>(ms);
+                                    sample = AdjustSampleTimestamp(sample);
                                     OnMetricsReceived?.Invoke(sample);
                                 }
                             }
