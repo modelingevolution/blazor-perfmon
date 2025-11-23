@@ -17,7 +17,6 @@ RUN dotnet workload install wasm-tools
 
 # Copy solution and project files
 COPY ["BlazorPerfMon.sln", "./"]
-COPY ["examples/ModelingEvolution.BlazorPerfMon.Example/ModelingEvolution.BlazorPerfMon.Example.sln", "examples/ModelingEvolution.BlazorPerfMon.Example/"]
 COPY ["examples/ModelingEvolution.BlazorPerfMon.Example/ModelingEvolution.BlazorPerfMon.Example/ModelingEvolution.BlazorPerfMon.Example.csproj", "examples/ModelingEvolution.BlazorPerfMon.Example/ModelingEvolution.BlazorPerfMon.Example/"]
 COPY ["examples/ModelingEvolution.BlazorPerfMon.Example/ModelingEvolution.BlazorPerfMon.Example.Client/ModelingEvolution.BlazorPerfMon.Example.Client.csproj", "examples/ModelingEvolution.BlazorPerfMon.Example/ModelingEvolution.BlazorPerfMon.Example.Client/"]
 COPY ["src/ModelingEvolution.BlazorPerfMon.Server/ModelingEvolution.BlazorPerfMon.Server.csproj", "src/ModelingEvolution.BlazorPerfMon.Server/"]
@@ -38,7 +37,7 @@ RUN dotnet build "ModelingEvolution.BlazorPerfMon.Example.csproj" -c Release -o 
 RUN dotnet publish "ModelingEvolution.BlazorPerfMon.Example.csproj" \
     -c Release \
     -o /app/publish \
-    /p:UseAppHost=false
+    --sc
 
 # Runtime stage
 FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS runtime
