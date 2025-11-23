@@ -15,6 +15,8 @@ internal sealed class ComputeLoadChart : IChart
     private readonly SampleAccessor<float> _ramPercentAccessor;
     private readonly SampleAccessor<uint> _timestampAccessor;
     private readonly TimeSeriesChart _renderer;
+    private readonly ComputeLoadTitleFormatter _titleFormatter = new();
+    private readonly TimeSeriesF[] _series = new TimeSeriesF[3];
     private ImmutableCircularBuffer<MetricSample> _buffer = new ImmutableCircularBuffer<MetricSample>(1);
 
     /// <summary>
@@ -61,16 +63,23 @@ internal sealed class ComputeLoadChart : IChart
         ulong ramTotalBytes = latestSample.Ram.TotalBytes;
         Bytes ramUsed = (long)ramUsedBytes;
         Bytes ramTotal = (long)ramTotalBytes;
-        string title = $"Compute Load {cpuAvgLatest:F1}% CPU, {gpuAvgLatest:F1}% GPU, {ramUsed}/{ramTotal} RAM";
 
-        var series = new[]
+        // Format title with caching - only allocates string if values changed
+        var titleData = new ComputeLoadTitleData
         {
-            new TimeSeriesF { Label = "CPU Avg", Data = _cpuAvgAccessor, Count = _cpuAvgAccessor.Count, Color = new SKColor(100, 255, 100) },
-            new TimeSeriesF { Label = "GPU", Data = _gpuAvgAccessor, Count = _gpuAvgAccessor.Count, Color = new SKColor(255, 200, 100) },
-            new TimeSeriesF { Label = "RAM", Data = _ramPercentAccessor, Count = _ramPercentAccessor.Count, Color = new SKColor(100, 200, 255) }
+            CpuAvg = cpuAvgLatest,
+            GpuAvg = gpuAvgLatest,
+            RamUsed = ramUsed,
+            RamTotal = ramTotal
         };
+        string title = _titleFormatter.Format(titleData);
 
-        _renderer.Setup(title, series, _timestampAccessor, _timestampAccessor.Count, _timeWindowMs, useDynamicScale: false);
+        // Update pre-allocated series array - no new allocations
+        _series[0] = new TimeSeriesF { Label = "CPU Avg", Data = _cpuAvgAccessor, Count = _cpuAvgAccessor.Count, Color = new SKColor(100, 255, 100) };
+        _series[1] = new TimeSeriesF { Label = "GPU", Data = _gpuAvgAccessor, Count = _gpuAvgAccessor.Count, Color = new SKColor(255, 200, 100) };
+        _series[2] = new TimeSeriesF { Label = "RAM", Data = _ramPercentAccessor, Count = _ramPercentAccessor.Count, Color = new SKColor(100, 200, 255) };
+
+        _renderer.Setup(title, _series, _timestampAccessor, _timestampAccessor.Count, _timeWindowMs, useDynamicScale: false);
         _renderer.Location = SKPoint.Empty;
         _renderer.Size = size;
         _renderer.Render(canvas);

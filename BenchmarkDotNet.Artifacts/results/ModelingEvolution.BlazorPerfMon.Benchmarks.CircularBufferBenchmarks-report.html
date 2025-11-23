@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang='en'>
+<head>
+<meta charset='utf-8' />
+<title>ModelingEvolution.BlazorPerfMon.Benchmarks.CircularBufferBenchmarks-20251123-143508</title>
+
+<style type="text/css">
+	table { border-collapse: collapse; display: block; width: 100%; overflow: auto; }
+	td, th { padding: 6px 13px; border: 1px solid #ddd; text-align: right; }
+	tr { background-color: #fff; border-top: 1px solid #ccc; }
+	tr:nth-child(even) { background: #f8f8f8; }
+</style>
+</head>
+<body>
+<pre><code>
+BenchmarkDotNet v0.15.6, Linux Ubuntu 24.04.2 LTS (Noble Numbat)
+Intel Core i9-9980HK CPU 2.40GHz, 1 CPU, 16 logical and 8 physical cores
+.NET SDK 10.0.100
+  [Host]     : .NET 10.0.0 (10.0.0, 10.0.25.52411), X64 RyuJIT x86-64-v3
+  Job-YFEFPZ : .NET 10.0.0 (10.0.0, 10.0.25.52411), X64 RyuJIT x86-64-v3
+</code></pre>
+<pre><code>IterationCount=10  WarmupCount=3  
+</code></pre>
+
+<table>
+<thead><tr><th>Method            </th><th>N</th><th>Mean </th><th>Error</th><th>StdDev</th><th>Ratio</th><th>RatioSD</th><th>Gen0</th><th>Gen1</th><th>Allocated</th><th>Alloc Ratio</th>
+</tr>
+</thead><tbody><tr><td>AddSample_ImmutableQueue</td><td>100</td><td>4,356.6 ns</td><td>585.60 ns</td><td>348.48 ns</td><td>1.01</td><td>0.10</td><td>1.1749</td><td>0.0381</td><td>9880 B</td><td>1.00</td>
+</tr><tr><td>AddSample_ImmutableArray</td><td>100</td><td>2,872.9 ns</td><td>170.17 ns</td><td>112.55 ns</td><td>0.66</td><td>0.05</td><td>1.7471</td><td>0.0458</td><td>14624 B</td><td>1.48</td>
+</tr><tr><td>AddSample_ImmutableList</td><td>100</td><td>1,013.3 ns</td><td>122.10 ns</td><td>80.76 ns</td><td>0.23</td><td>0.02</td><td>0.2041</td><td>-</td><td>1720 B</td><td>0.17</td>
+</tr><tr><td>Zip_ImmutableQueue</td><td>100</td><td>6,843.1 ns</td><td>920.34 ns</td><td>608.75 ns</td><td>1.58</td><td>0.17</td><td>0.0305</td><td>-</td><td>336 B</td><td>0.03</td>
+</tr><tr><td>Zip_ImmutableArray</td><td>100</td><td>516.1 ns</td><td>58.29 ns</td><td>38.56 ns</td><td>0.12</td><td>0.01</td><td>-</td><td>-</td><td>-</td><td>0.00</td>
+</tr><tr><td>Zip_ImmutableList</td><td>100</td><td>2,076.8 ns</td><td>374.33 ns</td><td>247.60 ns</td><td>0.48</td><td>0.06</td><td>-</td><td>-</td><td>-</td><td>0.00</td>
+</tr><tr><td>AddSample_ImmutableQueue</td><td>200</td><td>8,884.0 ns</td><td>949.15 ns</td><td>627.80 ns</td><td>1.00</td><td>0.09</td><td>2.3193</td><td>0.1526</td><td>19480 B</td><td>1.00</td>
+</tr><tr><td>AddSample_ImmutableArray</td><td>200</td><td>5,976.7 ns</td><td>549.95 ns</td><td>363.76 ns</td><td>0.68</td><td>0.06</td><td>3.4637</td><td>0.1755</td><td>29024 B</td><td>1.49</td>
+</tr><tr><td>AddSample_ImmutableList</td><td>200</td><td>1,028.9 ns</td><td>91.37 ns</td><td>60.44 ns</td><td>0.12</td><td>0.01</td><td>0.2308</td><td>-</td><td>1944 B</td><td>0.10</td>
+</tr><tr><td>Zip_ImmutableQueue</td><td>200</td><td>13,116.9 ns</td><td>1,984.78 ns</td><td>1,181.11 ns</td><td>1.48</td><td>0.16</td><td>0.0305</td><td>-</td><td>336 B</td><td>0.02</td>
+</tr><tr><td>Zip_ImmutableArray</td><td>200</td><td>1,013.5 ns</td><td>120.14 ns</td><td>79.47 ns</td><td>0.11</td><td>0.01</td><td>-</td><td>-</td><td>-</td><td>0.00</td>
+</tr><tr><td>Zip_ImmutableList</td><td>200</td><td>4,512.7 ns</td><td>476.81 ns</td><td>249.38 ns</td><td>0.51</td><td>0.04</td><td>-</td><td>-</td><td>-</td><td>0.00</td>
+</tr><tr><td>AddSample_ImmutableQueue</td><td>500</td><td>18,515.9 ns</td><td>1,173.23 ns</td><td>698.17 ns</td><td>1.00</td><td>0.05</td><td>5.7678</td><td>0.8545</td><td>48280 B</td><td>1.000</td>
+</tr><tr><td>AddSample_ImmutableArray</td><td>500</td><td>12,921.3 ns</td><td>951.20 ns</td><td>497.50 ns</td><td>0.70</td><td>0.04</td><td>8.5754</td><td>1.0681</td><td>72224 B</td><td>1.496</td>
+</tr><tr><td>AddSample_ImmutableList</td><td>500</td><td>1,182.7 ns</td><td>254.92 ns</td><td>151.70 ns</td><td>0.06</td><td>0.01</td><td>0.2575</td><td>-</td><td>2168 B</td><td>0.045</td>
+</tr><tr><td>Zip_ImmutableQueue</td><td>500</td><td>32,010.1 ns</td><td>1,542.24 ns</td><td>806.62 ns</td><td>1.73</td><td>0.07</td><td>0.0305</td><td>-</td><td>336 B</td><td>0.007</td>
+</tr><tr><td>Zip_ImmutableArray</td><td>500</td><td>2,450.7 ns</td><td>247.82 ns</td><td>147.47 ns</td><td>0.13</td><td>0.01</td><td>-</td><td>-</td><td>-</td><td>0.000</td>
+</tr><tr><td>Zip_ImmutableList</td><td>500</td><td>41,628.6 ns</td><td>4,079.63 ns</td><td>2,698.42 ns</td><td>2.25</td><td>0.16</td><td>-</td><td>-</td><td>-</td><td>0.000</td>
+</tr></tbody></table>
+</body>
+</html>

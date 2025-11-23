@@ -1,7 +1,7 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio Version 17
-VisualStudioVersion = 17.0.31903.59
+# Visual Studio Version 18
+VisualStudioVersion = 18.3.11206.111 d18.3
 MinimumVisualStudioVersion = 10.0.40219.1
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "src", "src", "{827E0CD3-B72D-47B6-A68D-7590B98EB39B}"
 EndProject
@@ -14,6 +14,9 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "examples", "examples", "{B36A84DF-456D-A817-6EDD-3EC3E7F6E11F}"
 EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "ModelingEvolution.BlazorPerfMon.Example", "ModelingEvolution.BlazorPerfMon.Example", "{5D45647B-4D26-B7ED-9546-BE1B58A783C7}"
+	ProjectSection(SolutionItems) = preProject
+		examples\ModelingEvolution.BlazorPerfMon.Example\Dockerfile = examples\ModelingEvolution.BlazorPerfMon.Example\Dockerfile
+	EndProjectSection
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "ModelingEvolution.BlazorPerfMon.Example", "examples\ModelingEvolution.BlazorPerfMon.Example\ModelingEvolution.BlazorPerfMon.Example\ModelingEvolution.BlazorPerfMon.Example.csproj", "{4E2028B9-66C8-4E36-BE56-E1CD2ECCA7E4}"
 EndProject
@@ -147,5 +150,8 @@ Global
 		{81A8EDA1-2264-4775-9827-11800A9D96BB} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{F0B9C45E-8BE8-4B4A-BED7-0E8A0B7867B7} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
 		{BBD7FFA6-880B-4736-9CAA-3B01CF39A83E} = {0AB3BF05-4346-4AA6-1389-037BE0695223}
+	EndGlobalSection
+	GlobalSection(ExtensibilityGlobals) = postSolution
+		SolutionGuid = {BA5485D7-4D67-4E95-AFFD-8ACDBEC7F01B}
 	EndGlobalSection
 EndGlobal

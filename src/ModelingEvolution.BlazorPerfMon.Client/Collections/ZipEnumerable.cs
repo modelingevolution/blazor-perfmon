@@ -4,6 +4,7 @@ namespace ModelingEvolution.BlazorPerfMon.Client.Collections;
 
 /// <summary>
 /// Zero-allocation struct-based Zip implementation for two SampleAccessor instances.
+/// Uses index-based access for optimal performance (O(1) instead of O(n) enumeration).
 /// Avoids LINQ Zip allocation overhead in hot rendering paths.
 /// </summary>
 /// <typeparam name="TFirst">Type of first accessor's projected values</typeparam>
@@ -23,33 +24,28 @@ internal readonly ref struct ZipEnumerable<TFirst, TSecond>
 
     public ref struct ZipEnumerator
     {
-        private IEnumerator<TFirst> _firstEnumerator;
-        private IEnumerator<TSecond> _secondEnumerator;
-        private bool _hasValue;
+        private readonly SampleAccessor<TFirst> _first;
+        private readonly SampleAccessor<TSecond> _second;
+        private readonly int _count;
+        private int _index;
 
         public ZipEnumerator(SampleAccessor<TFirst> first, SampleAccessor<TSecond> second)
         {
-            _firstEnumerator = first.GetEnumerator();
-            _secondEnumerator = second.GetEnumerator();
-            _hasValue = false;
+            _first = first;
+            _second = second;
+            _count = Math.Min(first.Count, second.Count);
+            _index = -1;
         }
 
         public bool MoveNext()
         {
-            _hasValue = _firstEnumerator.MoveNext() && _secondEnumerator.MoveNext();
-            return _hasValue;
+            _index++;
+            return _index < _count;
         }
 
-        public (TFirst First, TSecond Second) Current =>
-            _hasValue
-                ? (_firstEnumerator.Current, _secondEnumerator.Current)
-                : throw new InvalidOperationException("Enumerator is not positioned on a valid element");
+        public (TFirst First, TSecond Second) Current => (_first[_index], _second[_index]);
 
-        public void Dispose()
-        {
-            _firstEnumerator?.Dispose();
-            _secondEnumerator?.Dispose();
-        }
+        public void Dispose() { }
     }
 }
 

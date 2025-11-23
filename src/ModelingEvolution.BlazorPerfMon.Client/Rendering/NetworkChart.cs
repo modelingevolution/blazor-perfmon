@@ -19,6 +19,8 @@ internal sealed class NetworkChart : IChart
     private readonly SampleAccessor<uint> _timestampAccessor;
 
     private readonly TimeSeriesChart _renderer;
+    private readonly NetworkTitleFormatter _titleFormatter = new();
+    private readonly TimeSeriesF[] _series = new TimeSeriesF[2];
 
     /// <summary>
     /// Initializes a new instance of the NetworkChart class.
@@ -62,15 +64,21 @@ internal sealed class NetworkChart : IChart
         float txLatest = _txAccessor.Last();
         Bytes rxBytes = (long)rxLatest;
         Bytes txBytes = (long)txLatest;
-        string title = $"Network {_interfaceName} {rxBytes.FormatFixed()}/s RX, {txBytes.FormatFixed()}/s TX";
 
-        var series = new[]
+        // Format title with caching - only allocates string if values changed
+        var titleData = new NetworkTitleData
         {
-            new TimeSeriesF { Label = "Rx", Data = _rxAccessor, Count = _rxAccessor.Count, Color = new SKColor(100, 255, 100) },
-            new TimeSeriesF { Label = "Tx", Data = _txAccessor, Count = _txAccessor.Count, Color = new SKColor(255, 100, 100) }
+            InterfaceName = _interfaceName,
+            RxBytes = rxBytes,
+            TxBytes = txBytes
         };
+        string title = _titleFormatter.Format(titleData);
 
-        _renderer.Setup(title, series, _timestampAccessor, _timestampAccessor.Count, _timeWindowMs, useDynamicScale: true);
+        // Update pre-allocated series array - no new allocations
+        _series[0] = new TimeSeriesF { Label = "Rx", Data = _rxAccessor, Count = _rxAccessor.Count, Color = new SKColor(100, 255, 100) };
+        _series[1] = new TimeSeriesF { Label = "Tx", Data = _txAccessor, Count = _txAccessor.Count, Color = new SKColor(255, 100, 100) };
+
+        _renderer.Setup(title, _series, _timestampAccessor, _timestampAccessor.Count, _timeWindowMs, useDynamicScale: true);
         _renderer.Location = SKPoint.Empty;
         _renderer.Size = size;
         _renderer.Render(canvas);

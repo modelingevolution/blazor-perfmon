@@ -64,7 +64,14 @@
       "Bash(./examples/ModelingEvolution.BlazorPerfMon.Example/run.sh:*)",
       "mcp__playwright__browser_wait_for",
       "mcp__playwright__browser_snapshot",
-      "Bash(scp:*)"
+      "Bash(scp:*)",
+      "Bash(git mv:*)",
+      "Bash(./build.example.sh:*)",
+      "Bash(./run.example.sh)",
+      "Bash(gh run list:*)",
+      "Bash(gh secret:*)",
+      "Bash(git tag:*)",
+      "mcp__playwright__browser_run_code"
     ],
     "deny": [],
     "ask": []

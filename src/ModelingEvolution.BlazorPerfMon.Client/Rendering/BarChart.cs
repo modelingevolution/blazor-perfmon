@@ -144,6 +144,17 @@ public sealed class BarChart : ChartBase
                 float maxRatio = (maxValue - _minScale) / (_maxScale - _minScale);
                 float maxX = barStartX + (barWidth * maxRatio);
                 canvas.DrawLine(maxX, y, maxX, y + barHeight, ChartStyles.DottedLineOrange);
+
+                // Draw min value label (left aligned, black text)
+                string minText = string.Format(_valueFormat, minValue);
+                canvas.DrawText(minText, barStartX + 5, y + barHeight / 2 + 6, ChartStyles.LabelBlackBold);
+
+                // Draw max value label (right aligned, white text)
+                string maxText = string.Format(_valueFormat, maxValue);
+                var maxTextBounds = new SKRect();
+                ChartStyles.LabelBold.MeasureText(maxText, ref maxTextBounds);
+                float maxTextX = barStartX + barWidth - maxTextBounds.Width - 5;
+                canvas.DrawText(maxText, maxTextX, y + barHeight / 2 + 6, ChartStyles.LabelBold);
             }
 
             // Draw label

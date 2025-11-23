@@ -162,13 +162,36 @@ internal static class ChartStyles
 
     /// <summary>
     /// Bar foreground fill paint - green.
-    /// Use for filled portion of progress bars (CPU, memory, etc.).
+    /// Use for filled portion of CPU progress bars.
     /// </summary>
     public static readonly SKPaint BarFill = new()
     {
         Color = ChartColors.Green,
         IsAntialias = true,
         Style = SKPaintStyle.Fill
+    };
+
+    /// <summary>
+    /// RAM bar fill paint - blue.
+    /// Use for RAM usage bars (matches Compute Load RAM color).
+    /// </summary>
+    public static readonly SKPaint RamBarFill = new()
+    {
+        Color = ChartColors.Blue,
+        IsAntialias = true,
+        Style = SKPaintStyle.Fill
+    };
+
+    /// <summary>
+    /// CPU indicator line paint - green, 5px stroke.
+    /// Use for CPU percentage indicators (matches Compute Load CPU color).
+    /// </summary>
+    public static readonly SKPaint CpuIndicatorLine = new()
+    {
+        Color = ChartColors.Green,
+        Style = SKPaintStyle.Stroke,
+        StrokeWidth = 5f,
+        IsAntialias = true
     };
 
     // ===== Temperature Bar Styles =====

@@ -40,6 +40,18 @@ public readonly record struct MetricSource : IParsable<MetricSource>
     public uint ColSpan { get; init; }
 
     /// <summary>
+    /// Parameterless constructor with default values.
+    /// Required for field initializers in struct.
+    /// </summary>
+    public MetricSource()
+    {
+        Name = string.Empty;
+        Identifier = null;
+        Count = 1;
+        ColSpan = 1;
+    }
+
+    /// <summary>
     /// Converts the MetricSource to its string representation.
     /// </summary>
     /// <returns>A string in the format "Name/Count", "Name:Identifier/Count", or with optional "|col-span:N" suffix</returns>

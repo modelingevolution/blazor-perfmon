@@ -19,6 +19,8 @@ internal sealed class DiskChart : IChart
     private readonly SampleAccessor<uint> _timestampAccessor;
 
     private readonly TimeSeriesChart _renderer;
+    private readonly DiskTitleFormatter _titleFormatter = new();
+    private readonly TimeSeriesF[] _series = new TimeSeriesF[2];
 
     /// <summary>
     /// Initializes a new instance of the DiskChart class.
@@ -62,15 +64,21 @@ internal sealed class DiskChart : IChart
         float writeLatest = _writeAccessor.Last();
         Bytes readBytes = (long)readLatest;
         Bytes writeBytes = (long)writeLatest;
-        string title = $"Disk {_diskDevice} {readBytes.FormatFixed()}/s Read, {writeBytes.FormatFixed()}/s Write";
 
-        var series = new[]
+        // Format title with caching - only allocates string if values changed
+        var titleData = new DiskTitleData
         {
-            new TimeSeriesF { Label = "Read", Data = _readAccessor, Count = _readAccessor.Count, Color = new SKColor(100, 255, 100) },
-            new TimeSeriesF { Label = "Write", Data = _writeAccessor, Count = _writeAccessor.Count, Color = new SKColor(255, 100, 100) }
+            DiskDevice = _diskDevice,
+            ReadBytes = readBytes,
+            WriteBytes = writeBytes
         };
+        string title = _titleFormatter.Format(titleData);
 
-        _renderer.Setup(title, series, _timestampAccessor, _timestampAccessor.Count, _timeWindowMs, useDynamicScale: true);
+        // Update pre-allocated series array - no new allocations
+        _series[0] = new TimeSeriesF { Label = "Read", Data = _readAccessor, Count = _readAccessor.Count, Color = new SKColor(100, 255, 100) };
+        _series[1] = new TimeSeriesF { Label = "Write", Data = _writeAccessor, Count = _writeAccessor.Count, Color = new SKColor(255, 100, 100) };
+
+        _renderer.Setup(title, _series, _timestampAccessor, _timestampAccessor.Count, _timeWindowMs, useDynamicScale: true);
         _renderer.Location = SKPoint.Empty;
         _renderer.Size = size;
         _renderer.Render(canvas);

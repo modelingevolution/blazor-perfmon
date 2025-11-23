@@ -125,10 +125,10 @@ internal sealed class DockerContainersChart : IChart
         // Draw memory bar background
         canvas.DrawRect(barX, y, barWidth, barHeight, ChartStyles.BarBackground);
 
-        // Draw memory bar foreground (green - same as CPU bars)
+        // Draw memory bar foreground (blue - same as Compute Load RAM)
         var memoryRatio = _maxMemoryBytes > 0 ? (float)container.MemoryUsageBytes / _maxMemoryBytes : 0f;
         var filledWidth = barWidth * memoryRatio;
-        canvas.DrawRect(barX, y, filledWidth, barHeight, ChartStyles.BarFill);
+        canvas.DrawRect(barX, y, filledWidth, barHeight, ChartStyles.RamBarFill);
 
         // Draw dotted horizontal lines for min/max RAM
         var minRamRatio = _maxMemoryBytes > 0 ? (float)minRam / _maxMemoryBytes : 0f;
@@ -153,10 +153,10 @@ internal sealed class DockerContainersChart : IChart
         var textY = y + (barHeight / 2) + (textBounds.Height / 2);
         canvas.DrawText(cpuText, textX, textY, cpuTextPaint);
 
-        // CPU vertical line (light red, wider)
+        // CPU vertical line (green - same as Compute Load CPU)
         var cpuRatio = cpuNormalized / 100f;
         var cpuLineX = barX + (barWidth * cpuRatio);
-        canvas.DrawLine(cpuLineX, y, cpuLineX, y + barHeight, ChartStyles.IndicatorLine);
+        canvas.DrawLine(cpuLineX, y, cpuLineX, y + barHeight, ChartStyles.CpuIndicatorLine);
 
         // Draw memory value (right) - 16pt label
         Bytes memoryBytes = (long)container.MemoryUsageBytes;

@@ -124,6 +124,10 @@ public class Program
 {
     public static void Main(string[] args)
     {
-        BenchmarkRunner.Run<ZipBenchmarks>();
+        // Use BenchmarkSwitcher to allow selecting which benchmark to run
+        // Run all: dotnet run -c Release
+        // Run specific: dotnet run -c Release --filter *CircularBuffer*
+        var switcher = BenchmarkSwitcher.FromAssembly(typeof(Program).Assembly);
+        switcher.Run(args);
     }
 }

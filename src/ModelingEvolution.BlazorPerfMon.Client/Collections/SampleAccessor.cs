@@ -43,6 +43,13 @@ internal sealed class SampleAccessor<T> : IEnumerable<T>
     public int Count => _samples.Count;
 
     /// <summary>
+    /// Gets the projected value at the specified index. O(1) operation.
+    /// </summary>
+    /// <param name="index">The zero-based index of the element to get</param>
+    /// <returns>The projected value at the specified index</returns>
+    public T this[int index] => _selector(_samples[index]);
+
+    /// <summary>
     /// Gets the last (most recent) projected value. O(1) operation.
     /// Throws InvalidOperationException if the buffer is empty.
     /// </summary>
