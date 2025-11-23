@@ -30,6 +30,9 @@ jobs:
       with:
         dotnet-version: ${{ env.DOTNET_VERSION }}
 
+    - name: Install workloads
+      run: dotnet workload install wasm-tools
+
     - name: Extract version from tag
       id: get_version
       run: |
