@@ -138,7 +138,7 @@ public sealed class TimeSeriesChart : ChartBase
         // Draw axes
         DrawAxes(canvas, graphBounds);
 
-        // Draw grid
+        // Draw grid lines
         DrawGrid(canvas, graphBounds);
 
         // Draw data lines for all series
@@ -154,10 +154,10 @@ public sealed class TimeSeriesChart : ChartBase
     private void DrawAxes(SKCanvas canvas, SKRect bounds)
     {
         // Y-axis
-        canvas.DrawLine(bounds.Left, bounds.Top, bounds.Left, bounds.Bottom, Brushes.AxisStroke);
+        canvas.DrawLine(bounds.Left, bounds.Top, bounds.Left, bounds.Bottom, ChartStyles.Axis);
 
         // X-axis
-        canvas.DrawLine(bounds.Left, bounds.Bottom, bounds.Right, bounds.Bottom, Brushes.AxisStroke);
+        canvas.DrawLine(bounds.Left, bounds.Bottom, bounds.Right, bounds.Bottom, ChartStyles.Axis);
     }
 
     private void DrawGrid(SKCanvas canvas, SKRect bounds)
@@ -190,7 +190,7 @@ public sealed class TimeSeriesChart : ChartBase
             if (series.Count < 2)
                 continue;
 
-            // Reuse paint/path objects, just update colors and reset paths
+            // Update paint colors for this series and reset paths
             _linePaint.Color = series.Color;
             _fillPaint.Color = new SKColor(series.Color.Red, series.Color.Green, series.Color.Blue, 40);
             _path.Reset();
@@ -368,10 +368,14 @@ public sealed class TimeSeriesChart : ChartBase
             float value = _minValue + (_maxValue - _minValue) * fraction;
             float y = bounds.Bottom - (bounds.Height * i / 4f);
 
-            // Format based on magnitude
+            // Format based on magnitude with K/M/G scaling
             string label;
-            if (value >= 1000)
-                label = $"{value / 1000f:F1}K";
+            if (value >= 1_000_000_000)
+                label = $"{value / 1_000_000_000f:F1}G";
+            else if (value >= 1_000_000)
+                label = $"{value / 1_000_000f:F1}M";
+            else if (value >= 1_000)
+                label = $"{value / 1_000f:F1}K";
             else if (value >= 1)
                 label = $"{value:F1}";
             else

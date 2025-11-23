@@ -14,6 +14,13 @@ if [ -n "$APPSETTINGS_PATH" ] && [ -f "$APPSETTINGS_PATH" ]; then
   CONFIG_VOLUME_ARGS="-v $(realpath "$APPSETTINGS_PATH"):/app/appsettings.json:ro"
 fi
 
+# Mount tegrastats if available (for Jetson/Tegra platforms)
+TEGRASTATS_ARGS=""
+if [ -f "/usr/bin/tegrastats" ]; then
+  echo "Tegra platform detected, mounting tegrastats"
+  TEGRASTATS_ARGS="-v /usr/bin/tegrastats:/usr/bin/tegrastats:ro"
+fi
+
 docker run --rm \
   --name perfmon \
   --privileged \
@@ -23,4 +30,5 @@ docker run --rm \
   --cap-add SYS_ADMIN \
   --gpus all \
   $CONFIG_VOLUME_ARGS \
+  $TEGRASTATS_ARGS \
   modelingevolution/blazor-perfmon-example:latest

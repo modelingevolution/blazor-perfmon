@@ -26,7 +26,8 @@ else
 
 // Configure middleware
 app.UseRouting();
-app.UseAntiforgery();
+// Antiforgery not needed for WebSocket-only metrics application
+// app.UseAntiforgery();
 
 // Map Performance Monitor WebSocket endpoint
 app.MapPerformanceMonitorEndpoint();
