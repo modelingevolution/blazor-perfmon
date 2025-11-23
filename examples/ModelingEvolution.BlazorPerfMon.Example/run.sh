@@ -24,7 +24,7 @@ fi
 docker run --rm \
   --name perfmon \
   --privileged \
-  -p 5000:8080 \
+  --network host \
   -v /var/run/docker.sock:/var/run/docker.sock:ro \
   -v /proc:/host/proc:ro \
   --cap-add SYS_ADMIN \
