@@ -216,11 +216,103 @@ dotnet test
 
 ## Configuration
 
-Configure monitoring in `appsettings.json`:
-- Collection interval
-- Network interfaces to monitor
-- GPU monitoring settings
-- Docker API endpoint
+Configure monitoring in `appsettings.json` or `appsettings.{environment}.json`:
+
+### MonitorSettings
+
+```json
+{
+  "MonitorSettings": {
+    "NetworkInterface": "eth0",
+    "DiskDevice": "sda",
+    "CollectionIntervalMs": 500,
+    "DataPointsToKeep": 120,
+    "GpuCollectorType": "NvSmi",
+    "Layout": [
+      [ "CPU/8", "GPU/2", "ComputeLoad/3" ],
+      [ "Network:eth0/3", "Disk:sda/3" ],
+      [ "Docker", "RAM/3" ]
+    ]
+  }
+}
+```
+
+### Configuration Options
+
+- **NetworkInterface**: Network interface to monitor (e.g., `eth0`, `ether4`)
+- **DiskDevice**: Disk device to monitor (e.g., `sda`, `mmcblk0`)
+- **CollectionIntervalMs**: Metrics collection interval in milliseconds (default: 500)
+- **DataPointsToKeep**: Number of data points to retain in rolling window (default: 120)
+- **GpuCollectorType**: GPU collector implementation
+  - `NvSmi`: Standard NVIDIA GPU monitoring via nvidia-smi
+  - `NvTegra`: NVIDIA Jetson Tegra monitoring via tegrastats
+- **Layout**: Grid layout configuration (see Layout Syntax below)
+
+### Layout Syntax
+
+The Layout property defines how charts are arranged in a responsive grid. Each row is an array of chart specifications.
+
+**Chart Specification Format:**
+```
+ChartType[:Parameter]/Height[|col-span:Width]
+```
+
+**Components:**
+- `ChartType`: Type of chart (CPU, GPU, RAM, Network, Disk, Docker, ComputeLoad, Temperature)
+- `:Parameter`: Optional parameter (e.g., network interface, disk device)
+- `/Height`: Chart height in grid units
+- `|col-span:Width`: Optional column span for proportional width (default: 1)
+
+**Examples:**
+- `"CPU/8"` - CPU chart with height 8, width 1 (spans 1 column)
+- `"Network:eth0/3"` - Network chart for eth0 interface, height 3
+- `"ComputeLoad/3|col-span:2"` - Compute load chart, height 3, spans 2 columns
+- `"Temperature/9|col-span:5"` - Temperature chart, height 9, spans 5 columns
+
+**Layout Calculation:**
+- Each row's total width = sum of all col-span values in that row
+- Chart proportional width = col-span / total row width
+- Example: `["CPU/8", "Docker", "ComputeLoad/3|col-span:2"]`
+  - Total: 1 + 1 + 2 = 4
+  - Widths: CPU=1/4 (25%), Docker=1/4 (25%), ComputeLoad=2/4 (50%)
+
+### Example: NVIDIA Jetson Tegra Configuration
+
+```json
+{
+  "MonitorSettings": {
+    "NetworkInterface": "ether4",
+    "DiskDevice": "mmcblk0",
+    "CollectionIntervalMs": 500,
+    "DataPointsToKeep": 120,
+    "GpuCollectorType": "NvTegra",
+    "Layout": [
+      [ "CPU/8", "Docker", "ComputeLoad/3|col-span:2" ],
+      [ "Network:ether4/3", "Disk:mmcblk0/3" ],
+      [ "Temperature/9|col-span:5" ]
+    ]
+  }
+}
+```
+
+### Example: Standard x86 Configuration
+
+```json
+{
+  "MonitorSettings": {
+    "NetworkInterface": "eth0",
+    "DiskDevice": "sda",
+    "CollectionIntervalMs": 500,
+    "DataPointsToKeep": 120,
+    "GpuCollectorType": "NvSmi",
+    "Layout": [
+      [ "CPU/8", "GPU/2", "RAM/3" ],
+      [ "Network:eth0/3", "Disk:sda/3", "Docker" ],
+      [ "ComputeLoad/3|col-span:2" ]
+    ]
+  }
+}
+```
 
 ## Publishing NuGet Packages
 
