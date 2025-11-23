@@ -229,9 +229,8 @@ Configure monitoring in `appsettings.json` or `appsettings.{environment}.json`:
     "DataPointsToKeep": 120,
     "GpuCollectorType": "NvSmi",
     "Layout": [
-      [ "CPU/8", "GPU/2", "ComputeLoad/3" ],
-      [ "Network:eth0/3", "Disk:sda/3" ],
-      [ "Docker", "RAM/3" ]
+      [ "CPU/16", "GPU/1", "Docker", "ComputeLoad/3|col-span:2" ],
+      [ "Network:eth0/2", "Disk:sda/2" ]
     ]
   }
 }
@@ -265,7 +264,8 @@ ChartType[:Identifier]/Count[|col-span:N]
 
 **Examples:**
 - `"CPU/8"` - CPU chart with 8 cores, spans 1 column
-- `"Network:eth0/3"` - Network chart for eth0 interface with 3 data points
+- `"Network:eth0/2"` - Network chart for eth0 interface with 2 data points (RX/TX)
+- `"Disk:sda/2"` - Disk chart for sda device with 2 data points (read/write)
 - `"ComputeLoad/3|col-span:2"` - Compute load chart with 3 data points, spans 2 columns
 - `"Temperature/9|col-span:5"` - Temperature chart with 9 sensors, spans 5 columns
 
@@ -288,7 +288,7 @@ ChartType[:Identifier]/Count[|col-span:N]
     "GpuCollectorType": "NvTegra",
     "Layout": [
       [ "CPU/8", "Docker", "ComputeLoad/3|col-span:2" ],
-      [ "Network:ether4/3", "Disk:mmcblk0/3" ],
+      [ "Network:ether4/2", "Disk:mmcblk0/2" ],
       [ "Temperature/9|col-span:5" ]
     ]
   }
@@ -306,9 +306,8 @@ ChartType[:Identifier]/Count[|col-span:N]
     "DataPointsToKeep": 120,
     "GpuCollectorType": "NvSmi",
     "Layout": [
-      [ "CPU/8", "GPU/2", "RAM/3" ],
-      [ "Network:eth0/3", "Disk:sda/3", "Docker" ],
-      [ "ComputeLoad/3|col-span:2" ]
+      [ "CPU/16", "GPU/1", "Docker", "ComputeLoad/3|col-span:2" ],
+      [ "Network:eth0/2", "Disk:sda/2" ]
     ]
   }
 }
