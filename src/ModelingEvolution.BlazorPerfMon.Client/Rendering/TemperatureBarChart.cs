@@ -63,8 +63,11 @@ internal sealed class TemperatureBarChart : IChart
             _labels[i] = _labelAccessors[i].Last();
         }
 
+        // Sort by label name alphabetically (in-place sort to avoid allocations)
+        Array.Sort(_labels, _temperatures, StringComparer.Ordinal);
+
         _renderer.SetData(
-            title: "Temperatures",
+            title: "Temperatures [20°C : 100°C]",
             labels: _labels,
             labelCount: _sensorCount,
             values: _temperatures,
@@ -73,7 +76,8 @@ internal sealed class TemperatureBarChart : IChart
             maxScale: 100f,
             units: "°C",
             valueFormat: "{0:F1}",
-            colorMapper: ChartStyles.GetTemperaturePaint);
+            colorMapper: ChartStyles.GetTemperaturePaint,
+            enableMinMaxTracking: true);
         _renderer.Location = SKPoint.Empty;
         _renderer.Size = size;
         _renderer.Render(canvas);

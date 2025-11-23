@@ -18,6 +18,10 @@ public sealed class BarChart : ChartBase
     private string _units = "%";
     private string _valueFormat = "{0:F1}";
     private Func<float, SKPaint> _colorMapper = _ => ChartStyles.BarFill;
+    private bool _enableMinMaxTracking = false;
+
+    // Track min/max values per label for dotted lines
+    private readonly Dictionary<string, (float min, float max)> _minMaxTracking = new();
 
     /// <summary>
     /// Sets the data for the bar chart.
@@ -33,6 +37,7 @@ public sealed class BarChart : ChartBase
     /// <param name="units">Display units (default "%")</param>
     /// <param name="valueFormat">Format string for values (default "{0:F1}")</param>
     /// <param name="colorMapper">Optional function to map values to paint colors</param>
+    /// <param name="enableMinMaxTracking">Enable min/max tracking with dotted lines (default false)</param>
     public void SetData(
         string title,
         IEnumerable<string> labels,
@@ -43,7 +48,8 @@ public sealed class BarChart : ChartBase
         float maxScale = 100f,
         string units = "%",
         string valueFormat = "{0:F1}",
-        Func<float, SKPaint>? colorMapper = null)
+        Func<float, SKPaint>? colorMapper = null,
+        bool enableMinMaxTracking = false)
     {
         _title = title;
         _labels = labels;
@@ -55,6 +61,7 @@ public sealed class BarChart : ChartBase
         _units = units;
         _valueFormat = valueFormat;
         _colorMapper = colorMapper ?? (_ => ChartStyles.BarFill);
+        _enableMinMaxTracking = enableMinMaxTracking;
     }
 
     protected override void RenderContent(SKCanvas canvas)
@@ -94,6 +101,23 @@ public sealed class BarChart : ChartBase
             float clampedValue = Math.Clamp(value, _minScale, _maxScale);
             float fillRatio = (clampedValue - _minScale) / (_maxScale - _minScale);
 
+            // Update min/max tracking if enabled
+            if (_enableMinMaxTracking)
+            {
+                if (!_minMaxTracking.ContainsKey(label))
+                {
+                    _minMaxTracking[label] = (clampedValue, clampedValue);
+                }
+                else
+                {
+                    var (currentMin, currentMax) = _minMaxTracking[label];
+                    _minMaxTracking[label] = (
+                        Math.Min(currentMin, clampedValue),
+                        Math.Max(currentMax, clampedValue)
+                    );
+                }
+            }
+
             // Draw bar background
             var barBgRect = new SKRect(barStartX, y, barStartX + barWidth, y + barHeight);
             canvas.DrawRect(barBgRect, ChartStyles.BarBackground);
@@ -104,6 +128,22 @@ public sealed class BarChart : ChartBase
             {
                 var barRect = new SKRect(barStartX, y, barStartX + fillWidth, y + barHeight);
                 canvas.DrawRect(barRect, _colorMapper(value));
+            }
+
+            // Draw min/max dotted lines if tracking enabled
+            if (_enableMinMaxTracking && _minMaxTracking.ContainsKey(label))
+            {
+                var (minValue, maxValue) = _minMaxTracking[label];
+
+                // Draw min line (blue dotted)
+                float minRatio = (minValue - _minScale) / (_maxScale - _minScale);
+                float minX = barStartX + (barWidth * minRatio);
+                canvas.DrawLine(minX, y, minX, y + barHeight, ChartStyles.DottedLine);
+
+                // Draw max line (orange dotted)
+                float maxRatio = (maxValue - _minScale) / (_maxScale - _minScale);
+                float maxX = barStartX + (barWidth * maxRatio);
+                canvas.DrawLine(maxX, y, maxX, y + barHeight, ChartStyles.DottedLineOrange);
             }
 
             // Draw label
