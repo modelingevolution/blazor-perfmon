@@ -71,19 +71,12 @@
     /// </summary>
     [Parameter] public bool ShowStatusIndicator { get; set; } = true;
 
-    /// <summary>
-    /// Background color for the monitor canvas (default: #1a1a1a).
-    /// </summary>
-    [Parameter] public string BackgroundColor { get; set; } = "#1a1a1a";
-
     private SKCanvasView? _canvasView;
     private List<LayoutGridItem> _gridItems = new();
 
     private bool _isConnected;
     private uint _latestCollectionTimeMs;
     private string _currentStatusClass = "status-red";
-    private PeriodicTimer? _scaleUpdateTimer;
-    private Task? _scaleUpdateTask;
 
     // Configuration
     private PerformanceConfigurationSnapshot? _configuration;
@@ -112,45 +105,6 @@
 
         // Connect to WebSocket
         await WebSocketClient.ConnectAsync();
-    }
-
-    protected override async Task OnAfterRenderAsync(bool firstRender)
-    {
-        if (firstRender && _canvasView != null)
-        {
-            // Start scale update timer (every 5 seconds)
-            _scaleUpdateTimer = new PeriodicTimer(TimeSpan.FromSeconds(5));
-            _scaleUpdateTask = ScaleUpdateLoop();
-        }
-    }
-
-    private async Task ScaleUpdateLoop()
-    {
-        if (_scaleUpdateTimer == null) return;
-
-        try
-        {
-            while (await _scaleUpdateTimer.WaitForNextTickAsync())
-            {
-                // Update dynamic scale for all time-series charts (Network and Disk)
-                foreach (var gridItem in _gridItems)
-                {
-                    if (gridItem.Chart is NetworkChart networkChart)
-                    {
-                        // Access the internal TimeSeriesChart through reflection or add UpdateDynamicScale to IChart
-                        // For now, skip - will be handled by the chart itself
-                    }
-                    else if (gridItem.Chart is DiskChart diskChart)
-                    {
-                        // Same as above
-                    }
-                }
-            }
-        }
-        catch (OperationCanceledException)
-        {
-            // Timer disposed
-        }
     }
 
     private void OnConfigurationReceived(PerformanceConfigurationSnapshot configuration)
@@ -318,17 +272,6 @@
 
     public async ValueTask DisposeAsync()
     {
-        // Stop scale update timer
-        _scaleUpdateTimer?.Dispose();
-        if (_scaleUpdateTask != null)
-        {
-            try
-            {
-                await _scaleUpdateTask;
-            }
-            catch { }
-        }
-
         if (WebSocketClient != null)
         {
             WebSocketClient.OnConfigurationReceived -= OnConfigurationReceived;
