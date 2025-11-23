@@ -25,6 +25,7 @@ docker run --rm \
   --name perfmon \
   --privileged \
   --network host \
+  -e ASPNETCORE_URLS=http://0.0.0.0:5000 \
   -v /var/run/docker.sock:/var/run/docker.sock:ro \
   -v /proc:/host/proc:ro \
   --cap-add SYS_ADMIN \
