@@ -1,14 +1,17 @@
 using System.Diagnostics;
+using ModelingEvolution.BlazorPerfMon.Shared;
 
 namespace ModelingEvolution.BlazorPerfMon.Server.Collectors;
 
 /// <summary>
 /// GPU collector for desktop NVIDIA GPUs using nvidia-smi.
 /// Supports Turing, Ampere, Ada Lovelace architectures.
+/// Collects both utilization and temperature metrics.
 /// </summary>
-internal sealed class NvSmiGpuCollector : IGpuCollector
+internal sealed class NvSmiGpuCollector : IGpuCollector, ITemperatureCollector
 {
     private readonly ILogger<NvSmiGpuCollector> _logger;
+    private float _lastTemperature = 0f;
 
     public NvSmiGpuCollector(ILogger<NvSmiGpuCollector> logger)
     {
@@ -65,5 +68,47 @@ internal sealed class NvSmiGpuCollector : IGpuCollector
             _logger.LogError(ex, "Error collecting GPU metrics via nvidia-smi");
             return new float[] { 0f };
         }
+    }
+
+    /// <summary>
+    /// Collects GPU temperature using nvidia-smi.
+    /// Fails fast - throws on any error.
+    /// </summary>
+    /// <returns>Array with single GPU temperature metric</returns>
+    public TemperatureMetric[] CollectTemperatures()
+    {
+        var startInfo = new ProcessStartInfo
+        {
+            FileName = "nvidia-smi",
+            Arguments = "--query-gpu=temperature.gpu --format=csv,noheader,nounits",
+            RedirectStandardOutput = true,
+            RedirectStandardError = true,
+            UseShellExecute = false,
+            CreateNoWindow = true
+        };
+
+        using var process = Process.Start(startInfo);
+        if (process == null)
+        {
+            throw new InvalidOperationException("Failed to start nvidia-smi process for temperature");
+        }
+
+        string output = process.StandardOutput.ReadToEnd();
+        string error = process.StandardError.ReadToEnd();
+        process.WaitForExit();
+
+        if (process.ExitCode != 0)
+        {
+            throw new InvalidOperationException($"nvidia-smi temperature query exited with code {process.ExitCode}. Stderr: {error}");
+        }
+
+        // Parse output (e.g., "45")
+        if (!float.TryParse(output.Trim(), out float temperature))
+        {
+            throw new FormatException($"Failed to parse nvidia-smi temperature output: {output}");
+        }
+
+        _lastTemperature = temperature;
+        return new[] { new TemperatureMetric { Sensor = "gpu", TempCelsius = temperature } };
     }
 }

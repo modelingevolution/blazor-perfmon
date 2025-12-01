@@ -20,6 +20,7 @@ internal sealed class MultiplexService : IDisposable
     private readonly TransformBlock<Tuple<Tuple<(float[], float[], RamMetric, uint), (NetworkMetric[], uint), DiskMetric[]>, DockerContainerMetric[]>, byte[]> _serializeBlock;
     private readonly BroadcastBlock<byte[]> _broadcastBlock;
     private readonly IGpuCollector? _gpuCollector;
+    private readonly ITemperatureCollector? _temperatureCollector;
 
     private int _clientCount = 0;
 
@@ -33,9 +34,10 @@ internal sealed class MultiplexService : IDisposable
     /// </summary>
     public event Action? LastClientDisconnected;
 
-    public MultiplexService(IGpuCollector? gpuCollector = null)
+    public MultiplexService(IGpuCollector? gpuCollector = null, ITemperatureCollector? temperatureCollector = null)
     {
         _gpuCollector = gpuCollector;
+        _temperatureCollector = temperatureCollector;
 
         // Stage 4: Separate buffers for CPU+GPU+RAM (with timestamp), Network (with collection time), Disk, and Docker
         _cpuGpuBuffer = new BufferBlock<(float[], float[], RamMetric, uint)>(new DataflowBlockOptions
@@ -87,16 +89,11 @@ internal sealed class MultiplexService : IDisposable
                     TxBytes = n.TxBytes
                 }).ToArray();
 
-                // Extract temperatures from Tegra GPU collector if available
+                // Collect temperatures if available
                 TemperatureMetric[]? temperatures = null;
-                if (_gpuCollector is NvTegraGpuCollector tegraCollector && tegraCollector.LatestStats is not null)
+                if (_temperatureCollector != null)
                 {
-                    var tegraStats = tegraCollector.LatestStats.Value;
-                    temperatures = tegraStats.Temperatures.Select(t => new TemperatureMetric
-                    {
-                        Sensor = t.Sensor,
-                        TempCelsius = t.TempCelsius
-                    }).ToArray();
+                    temperatures = _temperatureCollector.CollectTemperatures();
                 }
 
                 var sample = new MetricSample

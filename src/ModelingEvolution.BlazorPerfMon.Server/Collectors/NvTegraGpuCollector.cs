@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using ModelingEvolution.BlazorPerfMon.Shared;
 
 namespace ModelingEvolution.BlazorPerfMon.Server.Collectors;
 
@@ -7,7 +8,7 @@ namespace ModelingEvolution.BlazorPerfMon.Server.Collectors;
 /// Supports Jetson Orin NX, AGX Orin, and other Tegra-based devices.
 /// Parses complete tegrastats output including RAM, CPU, temperatures, and power metrics.
 /// </summary>
-internal sealed class NvTegraGpuCollector : IGpuCollector
+internal sealed class NvTegraGpuCollector : IGpuCollector, ITemperatureCollector
 {
     private readonly ILogger<NvTegraGpuCollector> _logger;
     private Process? _tegrastatsProcess;
@@ -99,6 +100,25 @@ internal sealed class NvTegraGpuCollector : IGpuCollector
         return stats.HasValue
             ? [stats.Value.GpuUtilizationPercent]
             : [0f];
+    }
+
+    /// <summary>
+    /// Returns all temperature sensors from the latest tegrastats reading.
+    /// Includes cpu, gpu, cv0, cv1, cv2, soc0, soc1, soc2, tj, etc.
+    /// </summary>
+    public TemperatureMetric[] CollectTemperatures()
+    {
+        var stats = _latestStats;
+        if (!stats.HasValue || !stats.Value.Temperatures.Any())
+        {
+            return Array.Empty<TemperatureMetric>();
+        }
+
+        return stats.Value.Temperatures.Select(t => new TemperatureMetric
+        {
+            Sensor = t.Sensor,
+            TempCelsius = t.TempCelsius
+        }).ToArray();
     }
 
     ~NvTegraGpuCollector()

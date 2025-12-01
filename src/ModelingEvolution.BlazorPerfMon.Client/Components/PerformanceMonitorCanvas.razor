@@ -115,7 +115,7 @@
 
         // Create shared timestamp accessor
         var emptyBuffer = new ImmutableCircularBuffer<MetricSample>(1);
-        _timestampAccessor = new SampleAccessor<uint>(emptyBuffer, sample => sample.CreatedAt);
+        _timestampAccessor = new SampleAccessor<uint>(emptyBuffer, (in MetricSample sample) => sample.CreatedAt);
 
         // Clear existing grid items
         _gridItems.Clear();

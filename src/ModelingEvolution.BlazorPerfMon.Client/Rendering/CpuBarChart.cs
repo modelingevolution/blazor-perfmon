@@ -35,9 +35,9 @@ internal sealed class CpuBarChart : IChart
         for (int i = 0; i < cpuCount; i++)
         {
             int coreIndex = i; // Capture for closure
-            _cpuAccessors[i] = new SampleAccessor<float>(emptyBuffer, sample =>
+            _cpuAccessors[i] = new SampleAccessor<float>(emptyBuffer, (in MetricSample sample) =>
                 sample.CpuLoads != null && coreIndex < sample.CpuLoads.Length ? sample.CpuLoads[coreIndex] : 0f);
-            _cpuLabelAccessors[i] = new SampleAccessor<string>(emptyBuffer, sample => $"CPU{coreIndex}");
+            _cpuLabelAccessors[i] = new SampleAccessor<string>(emptyBuffer, (in MetricSample sample) => $"CPU{coreIndex}");
             _cpuLabels[i] = $"CPU{coreIndex}"; // Initialize labels once
         }
 

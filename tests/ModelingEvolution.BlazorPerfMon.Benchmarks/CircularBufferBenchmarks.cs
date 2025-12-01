@@ -68,8 +68,8 @@ public class CircularBufferBenchmarks
         };
 
         // Create accessors for Zip benchmarks
-        _queueFloatAccessor = new SampleAccessor<float>(_queueBuffer.AsImmutableCircularBuffer(), s => s.CpuAverage);
-        _queueUintAccessor = new SampleAccessor<uint>(_queueBuffer.AsImmutableCircularBuffer(), s => s.CreatedAt);
+        _queueFloatAccessor = new SampleAccessor<float>(_queueBuffer.AsImmutableCircularBuffer(), (in MetricSample s) => s.CpuAverage);
+        _queueUintAccessor = new SampleAccessor<uint>(_queueBuffer.AsImmutableCircularBuffer(), (in MetricSample s) => s.CreatedAt);
 
         _arrayFloatAccessor = new SampleAccessorArray<float>(_arrayBuffer, s => s.CpuAverage);
         _arrayUintAccessor = new SampleAccessorArray<uint>(_arrayBuffer, s => s.CreatedAt);

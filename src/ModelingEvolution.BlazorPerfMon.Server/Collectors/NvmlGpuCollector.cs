@@ -1,6 +1,7 @@
 using ManagedCuda.Nvml;
 using Microsoft.Extensions.Options;
 using ModelingEvolution.BlazorPerfMon.Server.Core;
+using ModelingEvolution.BlazorPerfMon.Shared;
 
 namespace ModelingEvolution.BlazorPerfMon.Server.Collectors;
 
@@ -9,8 +10,9 @@ namespace ModelingEvolution.BlazorPerfMon.Server.Collectors;
 /// Much faster than nvidia-smi (~1-2ms vs 300-900ms).
 /// Supports Turing, Ampere, Ada Lovelace architectures.
 /// Uses timeout (1/3 of tick interval) to prevent slow idle GPU queries.
+/// Collects both utilization and temperature metrics.
 /// </summary>
-internal sealed class NvmlGpuCollector : IGpuCollector, IDisposable
+internal sealed class NvmlGpuCollector : IGpuCollector, ITemperatureCollector, IDisposable
 {
     private readonly ILogger<NvmlGpuCollector> _logger;
     private readonly int _timeoutMs;
@@ -19,6 +21,7 @@ internal sealed class NvmlGpuCollector : IGpuCollector, IDisposable
     private bool _disposed;
     private nvmlDevice _device;
     private float _lastValue = 0f;
+    private float _lastTemperature = 0f;
 
     public NvmlGpuCollector(ILogger<NvmlGpuCollector> logger, IOptions<MonitorSettings> settings)
     {
@@ -118,6 +121,35 @@ internal sealed class NvmlGpuCollector : IGpuCollector, IDisposable
 
         // utilization.gpu is already a percentage (0-100)
         return Math.Clamp(utilization.gpu, 0f, 100f);
+    }
+
+    /// <summary>
+    /// Collects GPU temperature using NVML library.
+    /// Fails fast - throws on any error.
+    /// </summary>
+    /// <returns>Array with single GPU temperature metric</returns>
+    public TemperatureMetric[] CollectTemperatures()
+    {
+        if (!_initialized)
+        {
+            throw new InvalidOperationException("NVML not initialized");
+        }
+
+        if (_disposed)
+        {
+            throw new ObjectDisposedException(nameof(NvmlGpuCollector));
+        }
+
+        uint temperature = 0;
+        var result = NvmlNativeMethods.nvmlDeviceGetTemperature(_device, nvmlTemperatureSensors.Gpu, ref temperature);
+
+        if (result != nvmlReturn.Success && result != nvmlReturn.Unknown)
+        {
+            throw new InvalidOperationException($"Failed to get GPU temperature: {result}");
+        }
+
+        _lastTemperature = temperature;
+        return new[] { new TemperatureMetric { Sensor = "gpu", TempCelsius = temperature } };
     }
 
     public void Dispose()

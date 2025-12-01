@@ -52,7 +52,9 @@ public static class PerformanceMonitorExtensions
         services.AddSingleton<MultiplexService>(sp =>
         {
             var gpuCollector = sp.GetRequiredService<IGpuCollector>();
-            return new MultiplexService(gpuCollector);
+            // All GPU collectors now also implement ITemperatureCollector
+            var temperatureCollector = gpuCollector as ITemperatureCollector;
+            return new MultiplexService(gpuCollector, temperatureCollector);
         });
         services.AddSingleton<MetricsConfigurationBuilder>();
         services.AddSingleton<WebSocketService>();

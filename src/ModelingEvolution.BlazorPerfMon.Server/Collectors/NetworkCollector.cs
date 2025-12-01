@@ -5,7 +5,8 @@ namespace ModelingEvolution.BlazorPerfMon.Server.Collectors;
 
 /// <summary>
 /// Collects network interface statistics from /proc/net/dev.
-/// Returns delta bytes (Rx/Tx) since last collection for multiple interfaces.
+/// Returns cumulative bytes (Rx/Tx) since boot for multiple interfaces.
+/// Client is responsible for calculating deltas and rates.
 /// </summary>
 internal sealed class NetworkCollector : IMetricsCollector<NetworkMetric[]>
 {
@@ -15,9 +16,6 @@ internal sealed class NetworkCollector : IMetricsCollector<NetworkMetric[]>
     // Reusable array to avoid ToArray() allocations
     private readonly NetworkMetric[] _metrics;
     private readonly NetworkMetric[] _errorMetrics;
-
-    private readonly Dictionary<string, (ulong RxBytes, ulong TxBytes)> _prevValues = new();
-    private bool _isFirstRead = true;
 
     public NetworkCollector(IOptions<MonitorSettings> settings)
     {
@@ -50,7 +48,7 @@ internal sealed class NetworkCollector : IMetricsCollector<NetworkMetric[]>
     /// <summary>
     /// Collects network statistics for all configured interfaces.
     /// </summary>
-    /// <returns>Array of NetworkMetric with delta bytes for each interface</returns>
+    /// <returns>Array of NetworkMetric with cumulative bytes for each interface</returns>
     public NetworkMetric[] Collect()
     {
         try
@@ -93,8 +91,8 @@ internal sealed class NetworkCollector : IMetricsCollector<NetworkMetric[]>
                 }
 
                 // RxBytes is at index 1, TxBytes is at index 9
-                if (!ulong.TryParse(parts[1], out ulong currentRx) ||
-                    !ulong.TryParse(parts[9], out ulong currentTx))
+                if (!ulong.TryParse(parts[1], out ulong rxBytes) ||
+                    !ulong.TryParse(parts[9], out ulong txBytes))
                 {
                     _metrics[i] = new NetworkMetric
                     {
@@ -105,39 +103,15 @@ internal sealed class NetworkCollector : IMetricsCollector<NetworkMetric[]>
                     continue;
                 }
 
-                if (_isFirstRead || !_prevValues.ContainsKey(interfaceName))
-                {
-                    _prevValues[interfaceName] = (currentRx, currentTx);
-                    _metrics[i] = new NetworkMetric
-                    {
-                        Identifier = interfaceName,
-                        RxBytes = 0,
-                        TxBytes = 0
-                    };
-                    continue;
-                }
-
-                // Calculate deltas
-                var prev = _prevValues[interfaceName];
-                ulong rxDelta = currentRx >= prev.RxBytes
-                    ? currentRx - prev.RxBytes
-                    : 0; // Handle counter reset
-
-                ulong txDelta = currentTx >= prev.TxBytes
-                    ? currentTx - prev.TxBytes
-                    : 0; // Handle counter reset
-
-                _prevValues[interfaceName] = (currentRx, currentTx);
-
+                // Return cumulative values - client calculates deltas
                 _metrics[i] = new NetworkMetric
                 {
                     Identifier = interfaceName,
-                    RxBytes = rxDelta,
-                    TxBytes = txDelta
+                    RxBytes = rxBytes,
+                    TxBytes = txBytes
                 };
             }
 
-            _isFirstRead = false;
             return _metrics;
         }
         catch (Exception ex)

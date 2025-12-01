@@ -36,9 +36,9 @@ internal sealed class TemperatureBarChart : IChart
         for (int i = 0; i < sensorCount; i++)
         {
             int sensorIndex = i; // Capture for closure
-            _temperatureAccessors[i] = new SampleAccessor<float>(emptyBuffer, sample =>
+            _temperatureAccessors[i] = new SampleAccessor<float>(emptyBuffer, (in MetricSample sample) =>
                 sample.Temperatures != null && sensorIndex < sample.Temperatures.Length ? sample.Temperatures[sensorIndex].TempCelsius : 0f);
-            _labelAccessors[i] = new SampleAccessor<string>(emptyBuffer, sample =>
+            _labelAccessors[i] = new SampleAccessor<string>(emptyBuffer, (in MetricSample sample) =>
                 sample.Temperatures != null && sensorIndex < sample.Temperatures.Length ? sample.Temperatures[sensorIndex].Sensor : $"Sensor{sensorIndex}");
             _labels[i] = $"Sensor{sensorIndex}"; // Default label
         }

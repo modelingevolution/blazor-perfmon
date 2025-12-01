@@ -42,8 +42,8 @@ public class ZipBenchmarks
         }
 
         // Create accessors
-        _floatAccessor = new SampleAccessor<float>(_buffer, s => s.CpuAverage);
-        _uintAccessor = new SampleAccessor<uint>(_buffer, s => s.CreatedAt);
+        _floatAccessor = new SampleAccessor<float>(_buffer, (in MetricSample s) => s.CpuAverage);
+        _uintAccessor = new SampleAccessor<uint>(_buffer, (in MetricSample s) => s.CreatedAt);
 
         // Create lists for IEnumerable comparison
         _floatList = new List<float>();

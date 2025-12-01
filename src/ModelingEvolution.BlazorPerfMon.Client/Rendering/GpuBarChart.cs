@@ -35,9 +35,9 @@ internal sealed class GpuBarChart : IChart
         for (int i = 0; i < gpuCount; i++)
         {
             int gpuIndex = i; // Capture for closure
-            _gpuAccessors[i] = new SampleAccessor<float>(emptyBuffer, sample =>
+            _gpuAccessors[i] = new SampleAccessor<float>(emptyBuffer, (in MetricSample sample) =>
                 sample.GpuLoads != null && gpuIndex < sample.GpuLoads.Length ? sample.GpuLoads[gpuIndex] : 0f);
-            _gpuLabelAccessors[i] = new SampleAccessor<string>(emptyBuffer, sample =>
+            _gpuLabelAccessors[i] = new SampleAccessor<string>(emptyBuffer, (in MetricSample sample) =>
                 gpuCount > 1 ? $"GPU{gpuIndex}" : "GPU");
             _gpuLabels[i] = gpuCount > 1 ? $"GPU{gpuIndex}" : "GPU"; // Initialize labels once
         }

@@ -5,7 +5,8 @@ namespace ModelingEvolution.BlazorPerfMon.Server.Collectors;
 
 /// <summary>
 /// Collects disk I/O statistics from /proc/diskstats.
-/// Returns delta values (read/write bytes and IOPS) since last collection for multiple disks.
+/// Returns cumulative values (read/write bytes) since boot for multiple disks.
+/// Client is responsible for calculating deltas and rates.
 /// </summary>
 internal sealed class DiskCollector : IMetricsCollector<DiskMetric[]>
 {
@@ -17,15 +18,6 @@ internal sealed class DiskCollector : IMetricsCollector<DiskMetric[]>
     // Reusable arrays to avoid ToArray() allocations
     private readonly DiskMetric[] _metrics;
     private readonly DiskMetric[] _errorMetrics;
-
-    private readonly Dictionary<string, DiskState> _prevStates = new();
-    private bool _isFirstRead = true;
-
-    private readonly record struct DiskState(
-        ulong SectorsRead,
-        ulong SectorsWritten,
-        uint ReadsCompleted,
-        uint WritesCompleted);
 
     public DiskCollector(IOptions<MonitorSettings> settings)
     {
@@ -60,7 +52,7 @@ internal sealed class DiskCollector : IMetricsCollector<DiskMetric[]>
     /// <summary>
     /// Collects disk I/O statistics for all configured disk devices.
     /// </summary>
-    /// <returns>Array of DiskMetric with delta values for each disk device</returns>
+    /// <returns>Array of DiskMetric with cumulative values for each disk device</returns>
     public DiskMetric[] Collect()
     {
         try
@@ -130,52 +122,17 @@ internal sealed class DiskCollector : IMetricsCollector<DiskMetric[]>
                     continue;
                 }
 
-                if (_isFirstRead || !_prevStates.ContainsKey(diskDevice))
-                {
-                    _prevStates[diskDevice] = new DiskState(sectorsRead, sectorsWritten, readsCompleted, writesCompleted);
-                    _metrics[i] = new DiskMetric
-                    {
-                        Identifier = diskDevice,
-                        ReadBytes = 0,
-                        WriteBytes = 0,
-                        ReadIops = 0,
-                        WriteIops = 0
-                    };
-                    continue;
-                }
-
-                // Calculate deltas
-                var prev = _prevStates[diskDevice];
-
-                ulong readBytesDelta = sectorsRead >= prev.SectorsRead
-                    ? (sectorsRead - prev.SectorsRead) * SectorSize
-                    : 0; // Handle counter reset
-
-                ulong writeBytesDelta = sectorsWritten >= prev.SectorsWritten
-                    ? (sectorsWritten - prev.SectorsWritten) * SectorSize
-                    : 0; // Handle counter reset
-
-                uint readIopsDelta = readsCompleted >= prev.ReadsCompleted
-                    ? readsCompleted - prev.ReadsCompleted
-                    : 0;
-
-                uint writeIopsDelta = writesCompleted >= prev.WritesCompleted
-                    ? writesCompleted - prev.WritesCompleted
-                    : 0;
-
-                _prevStates[diskDevice] = new DiskState(sectorsRead, sectorsWritten, readsCompleted, writesCompleted);
-
+                // Return cumulative values - client calculates deltas
                 _metrics[i] = new DiskMetric
                 {
                     Identifier = diskDevice,
-                    ReadBytes = readBytesDelta,
-                    WriteBytes = writeBytesDelta,
-                    ReadIops = readIopsDelta,
-                    WriteIops = writeIopsDelta
+                    ReadBytes = sectorsRead * SectorSize,
+                    WriteBytes = sectorsWritten * SectorSize,
+                    ReadIops = readsCompleted,
+                    WriteIops = writesCompleted
                 };
             }
 
-            _isFirstRead = false;
             return _metrics;
         }
         catch (Exception ex)
