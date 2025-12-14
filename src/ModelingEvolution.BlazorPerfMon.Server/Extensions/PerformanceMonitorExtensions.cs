@@ -73,11 +73,13 @@ public static class PerformanceMonitorExtensions
     }
 
     /// <summary>
-    /// Maps the Performance Monitor WebSocket endpoint at /ws.
+    /// Maps the Performance Monitor WebSocket endpoint.
     /// Configures WebSockets middleware and wires up the engine to start/stop based on client connections.
     /// The metrics collection engine only runs when there is at least one connected WebSocket client.
     /// </summary>
-    public static IApplicationBuilder MapPerformanceMonitorEndpoint(this IApplicationBuilder app)
+    /// <param name="app">The application builder</param>
+    /// <param name="path">The WebSocket endpoint path (default: /ws/perfmon)</param>
+    public static IApplicationBuilder MapPerformanceMonitorEndpoint(this IApplicationBuilder app, string path = "/ws/perfmon")
     {
         // Enable WebSockets
         app.UseWebSockets(new WebSocketOptions
@@ -101,7 +103,7 @@ public static class PerformanceMonitorExtensions
         };
 
         // WebSocket endpoint for metrics streaming
-        app.Map("/ws", wsApp =>
+        app.Map(path, wsApp =>
         {
             wsApp.Run(async context =>
             {
