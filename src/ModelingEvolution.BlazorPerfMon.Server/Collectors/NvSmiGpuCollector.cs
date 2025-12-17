@@ -11,11 +11,68 @@ namespace ModelingEvolution.BlazorPerfMon.Server.Collectors;
 internal sealed class NvSmiGpuCollector : IGpuCollector, ITemperatureCollector
 {
     private readonly ILogger<NvSmiGpuCollector> _logger;
+    private readonly string? _nvidiaSmiPath;
     private float _lastTemperature = 0f;
+
+    private static readonly string[] NvidiaSmiPaths = new[]
+    {
+        "nvidia-smi",                    // Standard PATH lookup
+        "/usr/bin/nvidia-smi",           // Standard Linux location
+        "/usr/lib/wsl/lib/nvidia-smi",   // WSL2 location
+        "/usr/local/bin/nvidia-smi"      // Alternative location
+    };
 
     public NvSmiGpuCollector(ILogger<NvSmiGpuCollector> logger)
     {
         _logger = logger;
+        _nvidiaSmiPath = FindNvidiaSmi();
+        if (_nvidiaSmiPath == null)
+        {
+            _logger.LogWarning("nvidia-smi not found in any known location");
+        }
+        else
+        {
+            _logger.LogInformation("Found nvidia-smi at {Path}", _nvidiaSmiPath);
+        }
+    }
+
+    private static string? FindNvidiaSmi()
+    {
+        foreach (var path in NvidiaSmiPaths)
+        {
+            // For paths with directory, check if file exists
+            if (path.Contains('/') && File.Exists(path))
+                return path;
+
+            // For bare command, try to find via which
+            if (!path.Contains('/'))
+            {
+                try
+                {
+                    var whichInfo = new ProcessStartInfo
+                    {
+                        FileName = "which",
+                        Arguments = path,
+                        RedirectStandardOutput = true,
+                        UseShellExecute = false,
+                        CreateNoWindow = true
+                    };
+                    using var process = Process.Start(whichInfo);
+                    if (process != null)
+                    {
+                        var result = process.StandardOutput.ReadToEnd().Trim();
+                        process.WaitForExit();
+                        if (process.ExitCode == 0 && !string.IsNullOrEmpty(result))
+                            return result;
+                    }
+                }
+                catch
+                {
+                    // Ignore errors from which command
+                }
+            }
+        }
+        return null;
     }
 
     /// <summary>
@@ -24,11 +81,16 @@ internal sealed class NvSmiGpuCollector : IGpuCollector, ITemperatureCollector
     /// <returns>Single-element array with GPU utilization percentage (0-100)</returns>
     public float[] Collect()
     {
+        if (_nvidiaSmiPath == null)
+        {
+            return new float[] { 0f };
+        }
+
         try
         {
             var startInfo = new ProcessStartInfo
             {
-                FileName = "nvidia-smi",
+                FileName = _nvidiaSmiPath,
                 Arguments = "--query-gpu=utilization.gpu --format=csv,noheader,nounits",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -77,9 +139,14 @@ internal sealed class NvSmiGpuCollector : IGpuCollector, ITemperatureCollector
     /// <returns>Array with single GPU temperature metric</returns>
     public TemperatureMetric[] CollectTemperatures()
     {
+        if (_nvidiaSmiPath == null)
+        {
+            throw new InvalidOperationException("nvidia-smi not found in any known location");
+        }
+
         var startInfo = new ProcessStartInfo
         {
-            FileName = "nvidia-smi",
+            FileName = _nvidiaSmiPath,
             Arguments = "--query-gpu=temperature.gpu --format=csv,noheader,nounits",
             RedirectStandardOutput = true,
             RedirectStandardError = true,
