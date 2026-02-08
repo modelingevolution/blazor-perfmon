@@ -48,14 +48,14 @@ public static class PerformanceMonitorExtensions
             };
         });
 
+        // Register GPU collector as a temperature source
+        services.AddSingleton<ITemperatureSource>(sp => (ITemperatureSource)sp.GetRequiredService<IGpuCollector>());
+
+        // Composite aggregates all registered ITemperatureSource instances
+        services.AddSingleton<ITemperatureCollector, CompositeTemperatureCollector>();
+
         // Register services
-        services.AddSingleton<MultiplexService>(sp =>
-        {
-            var gpuCollector = sp.GetRequiredService<IGpuCollector>();
-            // All GPU collectors now also implement ITemperatureCollector
-            var temperatureCollector = gpuCollector as ITemperatureCollector;
-            return new MultiplexService(gpuCollector, temperatureCollector);
-        });
+        services.AddSingleton<MultiplexService>();
         services.AddSingleton<MetricsConfigurationBuilder>();
         services.AddSingleton<WebSocketService>();
         services.AddSingleton<PerformanceMonitorEngine>();

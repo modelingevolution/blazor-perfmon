@@ -8,7 +8,7 @@ namespace ModelingEvolution.BlazorPerfMon.Server.Collectors;
 /// Supports Jetson Orin NX, AGX Orin, and other Tegra-based devices.
 /// Parses complete tegrastats output including RAM, CPU, temperatures, and power metrics.
 /// </summary>
-internal sealed class NvTegraGpuCollector : IGpuCollector, ITemperatureCollector
+internal sealed class NvTegraGpuCollector : IGpuCollector, ITemperatureSource
 {
     private readonly ILogger<NvTegraGpuCollector> _logger;
     private Process? _tegrastatsProcess;

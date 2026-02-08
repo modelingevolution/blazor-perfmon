@@ -6,7 +6,7 @@ namespace ModelingEvolution.BlazorPerfMon.Server.Collectors;
 /// No-op GPU collector that returns zero/empty values when GPU monitoring is disabled.
 /// Used when GpuCollectorType is set to "none" or when no GPU is available.
 /// </summary>
-internal sealed class NoOpGpuCollector : IGpuCollector, ITemperatureCollector
+internal sealed class NoOpGpuCollector : IGpuCollector, ITemperatureSource
 {
     /// <summary>
     /// Returns zero GPU utilization (GPU monitoring disabled).

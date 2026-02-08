@@ -12,7 +12,7 @@ namespace ModelingEvolution.BlazorPerfMon.Server.Collectors;
 /// Uses timeout (1/3 of tick interval) to prevent slow idle GPU queries.
 /// Collects both utilization and temperature metrics.
 /// </summary>
-internal sealed class NvmlGpuCollector : IGpuCollector, ITemperatureCollector, IDisposable
+internal sealed class NvmlGpuCollector : IGpuCollector, ITemperatureSource, IDisposable
 {
     private readonly ILogger<NvmlGpuCollector> _logger;
     private readonly int _timeoutMs;

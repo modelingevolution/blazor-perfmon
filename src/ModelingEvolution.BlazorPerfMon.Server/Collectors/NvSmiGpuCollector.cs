@@ -8,7 +8,7 @@ namespace ModelingEvolution.BlazorPerfMon.Server.Collectors;
 /// Supports Turing, Ampere, Ada Lovelace architectures.
 /// Collects both utilization and temperature metrics.
 /// </summary>
-internal sealed class NvSmiGpuCollector : IGpuCollector, ITemperatureCollector
+internal sealed class NvSmiGpuCollector : IGpuCollector, ITemperatureSource
 {
     private readonly ILogger<NvSmiGpuCollector> _logger;
     private readonly string? _nvidiaSmiPath;
