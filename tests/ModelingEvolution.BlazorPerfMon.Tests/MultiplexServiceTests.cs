@@ -212,6 +212,44 @@ public class MultiplexServiceTests
     }
 
     /// <summary>
+    /// The client count drives engine start/stop, so unlinking something that was never linked
+    /// must not decrement it. Only a target the service actually holds counts as a disconnect.
+    /// </summary>
+    [Fact]
+    public void UnlinkClientTarget_TargetThatWasNeverLinked_LeavesTheClientCountAlone()
+    {
+        using var service = CreateService();
+
+        int lastDisconnected = 0;
+        service.LastClientDisconnected += () => lastDisconnected++;
+
+        var linked = service.CreateClientTarget(static _ => Task.CompletedTask);
+        var stray = new ActionBlock<byte[]>(static _ => { });
+
+        service.UnlinkClientTarget(stray);
+        Assert.Equal(0, lastDisconnected);
+
+        service.UnlinkClientTarget(linked);
+        Assert.Equal(1, lastDisconnected);
+    }
+
+    [Fact]
+    public void UnlinkClientTarget_CalledTwiceForTheSameClient_DisconnectsOnce()
+    {
+        using var service = CreateService();
+
+        int lastDisconnected = 0;
+        service.LastClientDisconnected += () => lastDisconnected++;
+
+        var target = service.CreateClientTarget(static _ => Task.CompletedTask);
+
+        service.UnlinkClientTarget(target);
+        service.UnlinkClientTarget(target);
+
+        Assert.Equal(1, lastDisconnected);
+    }
+
+    /// <summary>
     /// One post per tick means a tick either goes through whole or not at all - the pre-fix
     /// pipeline posted to four buffers and combined the results with '&amp;', so a single refused
     /// post left the JoinBlocks pairing metrics from different cycles from then on.

@@ -28,12 +28,23 @@ internal sealed class MultiplexService : IDisposable
     private readonly ILogger<MultiplexService> _logger;
 
     /// <summary>
+    /// A linked client and the id that identifies it in the log.
+    /// </summary>
+    private readonly record struct ClientTarget(int Id, ITargetBlock<byte[]> Target);
+
+    /// <summary>
     /// Currently linked client targets. Swapped atomically with <see cref="ImmutableInterlocked"/>
     /// so the fan-out reads it without a lock.
     /// </summary>
-    private ImmutableList<ITargetBlock<byte[]>> _clientTargets = ImmutableList<ITargetBlock<byte[]>>.Empty;
+    private ImmutableList<ClientTarget> _clientTargets = ImmutableList<ClientTarget>.Empty;
 
     private int _clientCount;
+
+    /// <summary>
+    /// Id given to the most recently linked client. Ids are never reused, so a log line names one
+    /// specific connection for the lifetime of the process.
+    /// </summary>
+    private int _lastClientId;
 
     /// <summary>
     /// Fired when the first client connects (transition from 0 to 1 clients).
@@ -115,8 +126,10 @@ internal sealed class MultiplexService : IDisposable
 
         for (int i = 0; i < targets.Count; i++)
         {
-            if (!targets[i].Post(data))
-                _logger.LogWarning("Client target is full, dropping sample for that client");
+            var client = targets[i];
+
+            if (!client.Target.Post(data))
+                _logger.LogWarning("Client {ClientId} is not keeping up, dropping this sample for it", client.Id);
         }
     }
 
@@ -135,10 +148,11 @@ internal sealed class MultiplexService : IDisposable
                 MaxDegreeOfParallelism = 1
             });
 
-        ImmutableInterlocked.Update(ref _clientTargets, static (targets, target) => targets.Add(target), (ITargetBlock<byte[]>)actionBlock);
+        var clientId = Interlocked.Increment(ref _lastClientId);
+        ImmutableInterlocked.Update(ref _clientTargets, static (targets, client) => targets.Add(client), new ClientTarget(clientId, actionBlock));
 
         var newCount = Interlocked.Increment(ref _clientCount);
-        _logger.LogInformation("Client target linked, {ClientCount} client(s) connected", newCount);
+        _logger.LogInformation("Client {ClientId} linked, {ClientCount} client(s) connected", clientId, newCount);
 
         if (newCount == 1)
         {
@@ -155,12 +169,30 @@ internal sealed class MultiplexService : IDisposable
     /// </summary>
     public void UnlinkClientTarget(ITargetBlock<byte[]> target)
     {
-        ImmutableInterlocked.Update(ref _clientTargets, static (targets, t) => targets.Remove(t), target);
+        int clientId = 0;
+
+        // The transformer can run more than once under contention; finding the same client and
+        // assigning the same id each time is harmless.
+        bool removed = ImmutableInterlocked.Update(ref _clientTargets, targets =>
+        {
+            int index = targets.FindIndex(c => c.Target == target);
+            if (index < 0)
+                return targets;
+
+            clientId = targets[index].Id;
+            return targets.RemoveAt(index);
+        });
 
         target.Complete();
 
+        if (!removed)
+        {
+            _logger.LogWarning("Unlink requested for a target that is not linked, client count left at {ClientCount}", Volatile.Read(ref _clientCount));
+            return;
+        }
+
         var newCount = Interlocked.Decrement(ref _clientCount);
-        _logger.LogInformation("Client target unlinked, {ClientCount} client(s) connected", newCount);
+        _logger.LogInformation("Client {ClientId} unlinked, {ClientCount} client(s) connected", clientId, newCount);
 
         if (newCount == 0)
         {
