@@ -115,14 +115,21 @@ internal sealed class PerformanceMonitorEngine : IDisposable
                                 networkSw.ElapsedMilliseconds, diskSw.ElapsedMilliseconds, dockerSw.ElapsedMilliseconds);
                         }
 
-                        // Post to pipeline with timestamp captured before collection
-                        var postSuccess = _multiplexService.PostCpuGpuRamMetrics(cpuTask.Result, gpuTask.Result, ramTask.Result, timestampMs)
-                                        & _multiplexService.PostNetworkMetrics(networkTask.Result, collectionTimeMs)
-                                        & _multiplexService.PostDiskMetrics(diskTask.Result)
-                                        & _multiplexService.PostDockerMetrics(dockerTask.Result);
+                        // Post the whole cycle as one tick, with the timestamp captured before collection.
+                        // A single post cannot partially fail, so the pipeline can never pair metrics
+                        // from different cycles under backpressure.
+                        var tick = new MetricTick(
+                            CpuLoads: cpuTask.Result,
+                            GpuLoads: gpuTask.Result,
+                            Ram: ramTask.Result,
+                            NetworkMetrics: networkTask.Result,
+                            DiskMetrics: diskTask.Result,
+                            DockerContainers: dockerTask.Result,
+                            TimestampMs: timestampMs,
+                            CollectionDurationMs: collectionTimeMs);
 
-                        if (!postSuccess)
-                            _logger.LogWarning("Backpressure detected: some metrics not posted");
+                        if (!_multiplexService.PostMetrics(tick))
+                            _logger.LogWarning("Backpressure detected: metrics tick {TimestampMs} not posted", timestampMs);
                     }
                     catch (Exception ex)
                     {

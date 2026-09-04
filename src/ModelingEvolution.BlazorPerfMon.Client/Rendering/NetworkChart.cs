@@ -22,54 +22,16 @@ internal sealed class NetworkChart : IChart
     private readonly NetworkTitleFormatter _titleFormatter = new();
     private readonly TimeSeriesF[] _series = new TimeSeriesF[2];
 
-    // Cached interface index to avoid IndexOf on every sample
-    private int _interfaceIndex = -1;
-    private int _interfaceCount = 0;
+    private readonly MetricRateCalculator<NetworkMetric> _rateCalculator;
 
-    private float CalculateRate(in MetricSample current, in MetricSample previous, Func<NetworkMetric, ulong> valueSelector)
-    {
-        // Handle first sample (no previous)
-        if (previous.CreatedAt == 0)
-            return 0f;
+    private float CalculateRate(in MetricSample current, in MetricSample previous, Func<NetworkMetric, ulong> valueSelector) =>
+        _rateCalculator.Calculate(current.NetworkMetrics, current.CreatedAt, previous.NetworkMetrics, previous.CreatedAt, valueSelector);
 
-        uint durationMs = current.CreatedAt - previous.CreatedAt;
-        if (durationMs == 0)
-            return 0f;
-
-        var currentMetrics = current.NetworkMetrics;
-        var previousMetrics = previous.NetworkMetrics;
-
-        if (currentMetrics == null || previousMetrics == null)
-            return 0f;
-
-        // Re-find interface index only if array length changed
-        if (_interfaceIndex == -1 || currentMetrics.Length != _interfaceCount)
-        {
-            _interfaceIndex = currentMetrics.IndexOf(n => n.Identifier == _interfaceName);
-            _interfaceCount = currentMetrics.Length;
-        }
-
-        if (_interfaceIndex == -1 || _interfaceIndex >= currentMetrics.Length || _interfaceIndex >= previousMetrics.Length)
-            return 0f;
-
-        // Calculate delta bytes and rate using cached index
-        ulong currentValue = valueSelector(currentMetrics[_interfaceIndex]);
-        ulong previousValue = valueSelector(previousMetrics[_interfaceIndex]);
-
-        // Handle counter wrap/reset
-        if (currentValue < previousValue)
-            return 0f;
-
-        ulong deltaBytes = currentValue - previousValue;
-        float durationSec = durationMs / 1000f;
-
-        return deltaBytes / durationSec;
-    }
     /// <summary>
     /// Initializes a new instance of the NetworkChart class.
     /// </summary>
     /// <param name="interfaceName">The network interface name to monitor (e.g., "eth0", "wlan0")</param>
-    /// <param name="intervalSec">The collection interval in seconds (unused - kept for API compatibility)</param>
+    /// <param name="intervalSec">The server collection interval in seconds, used to detect discontinuities</param>
     /// <param name="timeWindowMs">The time window in milliseconds for historical data display</param>
     /// <param name="timestampAccessor">Accessor for metric timestamps</param>
     public NetworkChart(string interfaceName, float intervalSec, int timeWindowMs,
@@ -78,6 +40,7 @@ internal sealed class NetworkChart : IChart
         _interfaceName = interfaceName;
         _timeWindowMs = timeWindowMs;
         _timestampAccessor = timestampAccessor;
+        _rateCalculator = new MetricRateCalculator<NetworkMetric>(interfaceName, intervalSec, static m => m.Identifier);
 
         var emptyBuffer = new ImmutableCircularBuffer<MetricSample>(1);
 

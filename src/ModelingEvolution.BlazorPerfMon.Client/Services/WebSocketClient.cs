@@ -15,7 +15,6 @@ public sealed class WebSocketClient : IAsyncDisposable
     private CancellationTokenSource? _cts;
     private Task? _receiveTask;
     private bool _isDisposed;
-    private long _timeAdjustmentMs = 0;
 
     /// <summary>
     /// Event fired when configuration snapshot is received (first message).
@@ -47,34 +46,39 @@ public sealed class WebSocketClient : IAsyncDisposable
     public bool IsConnected => _webSocket?.State == WebSocketState.Open;
 
     /// <summary>
-    /// Adjusts sample timestamp to account for clock differences between server and browser.
-    /// If the difference is less than 500ms and positive, the sample is returned unchanged.
-    /// Otherwise, calculates a new adjustment based on the original server timestamp.
+    /// Largest browser-ahead-of-server difference that is still considered normal transport delay.
+    /// Beyond it the server clock is treated as skewed and the browser clock is used instead.
     /// </summary>
-    /// <param name="sample">Original sample with server timestamp</param>
-    /// <returns>Sample with adjusted timestamp</returns>
-    private MetricSample AdjustSampleTimestamp(MetricSample sample)
+    internal const int MaxAcceptedSkewMs = 500;
+
+    /// <summary>
+    /// Adjusts a sample timestamp to account for clock differences between server and browser.
+    ///
+    /// The server truncates epoch milliseconds to 32 bits, so the browser time must be truncated
+    /// the same way and the difference computed with unchecked 32-bit arithmetic. Comparing the
+    /// truncated server value against full 64-bit browser milliseconds always yielded a ~1.7e12
+    /// difference, so every sample got its timestamp replaced by browser arrival time, which
+    /// destroyed the real spacing between samples.
+    /// See docs/bugs/bug-007-perfmon-network-first-sample-spike.md.
+    /// </summary>
+    /// <param name="serverTimestampMs">Server timestamp: epoch milliseconds truncated to 32 bits</param>
+    /// <param name="browserUnixTimeMs">Browser time as full epoch milliseconds</param>
+    /// <returns>The server timestamp, or the browser timestamp when the server clock is skewed</returns>
+    internal static uint AdjustSampleTimestamp(uint serverTimestampMs, long browserUnixTimeMs)
     {
-        // Get browser time in milliseconds since epoch
-        long browserTimeMs = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
-        long serverTimeMs = sample.CreatedAt;
+        uint browserTimestampMs = unchecked((uint)browserUnixTimeMs);
+        int skewMs = unchecked((int)(browserTimestampMs - serverTimestampMs));
 
-        // Calculate difference: browser time - server time
-        long differenceMs = browserTimeMs - serverTimeMs;
+        return skewMs >= 0 && skewMs < MaxAcceptedSkewMs
+            ? serverTimestampMs
+            : browserTimestampMs;
+    }
 
-        // If difference is positive and < 500ms, accept as-is
-        if (differenceMs >= 0 && differenceMs < 500)
-        {
-            return sample;
-        }
+    private static MetricSample AdjustSampleTimestamp(MetricSample sample)
+    {
+        uint adjusted = AdjustSampleTimestamp(sample.CreatedAt, DateTimeOffset.UtcNow.ToUnixTimeMilliseconds());
 
-        // Otherwise, calculate new adjustment based on original server timestamp
-        _timeAdjustmentMs = browserTimeMs - serverTimeMs;
-
-        // Apply adjustment to create new sample with corrected timestamp
-        uint adjustedTimestamp = (uint)(serverTimeMs + _timeAdjustmentMs);
-
-        return sample with { CreatedAt = adjustedTimestamp };
+        return adjusted == sample.CreatedAt ? sample : sample with { CreatedAt = adjusted };
     }
 
     /// <summary>
