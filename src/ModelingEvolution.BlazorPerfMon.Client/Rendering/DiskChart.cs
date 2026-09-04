@@ -22,55 +22,16 @@ internal sealed class DiskChart : IChart
     private readonly DiskTitleFormatter _titleFormatter = new();
     private readonly TimeSeriesF[] _series = new TimeSeriesF[2];
 
-    // Cached disk index to avoid IndexOf on every sample
-    private int _diskIndex = -1;
-    private int _diskCount = 0;
+    private readonly MetricRateCalculator<DiskMetric> _rateCalculator;
 
-    private float CalculateRate(in MetricSample current, in MetricSample previous, Func<DiskMetric, ulong> valueSelector)
-    {
-        // Handle first sample (no previous)
-        if (previous.CreatedAt == 0)
-            return 0f;
-
-        uint durationMs = current.CreatedAt - previous.CreatedAt;
-        if (durationMs == 0)
-            return 0f;
-
-        var currentMetrics = current.DiskMetrics;
-        var previousMetrics = previous.DiskMetrics;
-
-        if (currentMetrics == null || previousMetrics == null)
-            return 0f;
-
-        // Re-find disk index only if array length changed
-        if (_diskIndex == -1 || currentMetrics.Length != _diskCount)
-        {
-            _diskIndex = currentMetrics.IndexOf(d => d.Identifier == _diskDevice);
-            _diskCount = currentMetrics.Length;
-        }
-
-        if (_diskIndex == -1 || _diskIndex >= currentMetrics.Length || _diskIndex >= previousMetrics.Length)
-            return 0f;
-
-        // Calculate delta bytes and rate using cached index
-        ulong currentValue = valueSelector(currentMetrics[_diskIndex]);
-        ulong previousValue = valueSelector(previousMetrics[_diskIndex]);
-
-        // Handle counter wrap/reset
-        if (currentValue < previousValue)
-            return 0f;
-
-        ulong deltaBytes = currentValue - previousValue;
-        float durationSec = durationMs / 1000f;
-
-        return deltaBytes / durationSec;
-    }
+    private float CalculateRate(in MetricSample current, in MetricSample previous, Func<DiskMetric, ulong> valueSelector) =>
+        _rateCalculator.Calculate(current.DiskMetrics, current.CreatedAt, previous.DiskMetrics, previous.CreatedAt, valueSelector);
 
     /// <summary>
     /// Initializes a new instance of the DiskChart class.
     /// </summary>
     /// <param name="diskDevice">The disk device name to monitor (e.g., "sda", "nvme0n1")</param>
-    /// <param name="intervalSec">The collection interval in seconds (unused - kept for API compatibility)</param>
+    /// <param name="intervalSec">The server collection interval in seconds, used to detect discontinuities</param>
     /// <param name="timeWindowMs">The time window in milliseconds for historical data display</param>
     /// <param name="timestampAccessor">Accessor for metric timestamps</param>
     public DiskChart(string diskDevice, float intervalSec, int timeWindowMs,
@@ -79,6 +40,7 @@ internal sealed class DiskChart : IChart
         _diskDevice = diskDevice;
         _timeWindowMs = timeWindowMs;
         _timestampAccessor = timestampAccessor;
+        _rateCalculator = new MetricRateCalculator<DiskMetric>(diskDevice, intervalSec, static m => m.Identifier);
 
         var emptyBuffer = new ImmutableCircularBuffer<MetricSample>(1);
 

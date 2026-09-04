@@ -42,4 +42,8 @@
     <ProjectReference Include="..\ModelingEvolution.BlazorPerfMon.Shared\ModelingEvolution.BlazorPerfMon.Shared.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <InternalsVisibleTo Include="ModelingEvolution.BlazorPerfMon.Tests" />
+  </ItemGroup>
+
 </Project>
